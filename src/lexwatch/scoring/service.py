@@ -1,6 +1,10 @@
 """Scoring orchestration: rule scores, matches, rescoring and the Rules preview.
 
-Service functions flush but never commit; the caller owns the transaction.
+Service functions flush and never commit on their own; the caller owns the transaction.
+``score_pending_bills`` and ``rescore_profile`` accept a ``commit`` callback (the jobs pass
+``session.commit``): it is called after each scoring batch, so a crash or a stop keeps the
+scores already computed, and the run's ``details["progress"]`` (done/total pairs) is visible
+on the admin page while the run is going.
 
 What gets scored
     A (rule, bill) pair needs a score when the bill is ``pending``/``unscored`` (new, changed,
@@ -16,6 +20,14 @@ Bill state
     sent) when every request it was part of succeeded, otherwise ``unscored``. Its data is
     never removed. With no rules at all, pending bills become ``scored`` without any request:
     there is nothing to score them against, and new rules are handled by ``rescore_profile``.
+    A pending bill's pair is sent again only when it has no current-model score from after
+    the bill's last change, so a run interrupted half-way resumes where it stopped.
+
+Bills without text
+    A bill whose title and summary are blank (a vote-only record, for example) is never sent
+    to the scorer and never matched. It stays ``pending`` but the scoring queries skip it, so
+    it is not retried every run; when a title arrives, ingestion marks it changed and it is
+    scored like any other bill.
 
 Matches
     ``profile_score`` is the plain mean of the profile's rule scores for a bill, computed only
@@ -29,17 +41,18 @@ from __future__ import annotations
 import hashlib
 import logging
 import threading
+import time
 from collections import OrderedDict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlalchemy import case, delete, exists, func, or_, select
+from sqlalchemy import and_, case, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from lexwatch.config import Settings
-from lexwatch.models import Bill, Match, Profile, Rule, RuleScore, Run
+from lexwatch.models import Bill, Match, Profile, Rule, RuleScore, Run, bill_recency_order
 from lexwatch.scoring.base import Scorer, ScorerUnavailable, ScoringError
 from lexwatch.scoring.text import bill_text
 
@@ -51,6 +64,18 @@ PREVIEW_CACHE_SIZE = 4096
 # 0.44999999999999996 in binary floating point.
 SCORE_DECIMALS = 6
 _IN_CHUNK = 1000  # bound the size of IN (...) lists and multi-row inserts
+PENDING_STATES = ("pending", "unscored")
+PROGRESS_LOG_SECONDS = 15.0  # scoring.progress log lines at most this often (and at the end)
+
+CommitFn = Callable[[], None]
+
+
+def has_text():
+    """SQL: the bill has a non-blank title or summary (bills without text are never scored)."""
+    return or_(
+        func.coalesce(Bill.title, "").op("~")(r"\S"),
+        func.coalesce(Bill.summary, "").op("~")(r"\S"),
+    )
 
 
 @dataclass(slots=True)
@@ -137,7 +162,19 @@ def _active_rule_ids(session: Session, profile_id: int) -> list[int]:
 
 
 def _missing_bills(session: Session, rule_ids: list[int], model: str) -> set[str]:
-    """Bills lacking a current-model score for at least one of ``rule_ids``."""
+    """Bills with text lacking a current-model score for at least one of ``rule_ids``."""
+    return _bills_to_score(session, rule_ids, model, pending=False)
+
+
+def _bills_to_score(
+    session: Session, rule_ids: list[int], model: str, *, pending: bool = True
+) -> set[str]:
+    """Bills with text that need a score for at least one of ``rule_ids``.
+
+    A bill needs one when it has no current-model score for the rule, or (``pending``) when
+    it is ``pending``/``unscored`` and its score predates the bill's last change. A pair
+    already scored after that change (by a run that stopped half-way) is not sent again.
+    """
     missing: set[str] = set()
     for rule_id in rule_ids:
         has_current = exists().where(
@@ -145,7 +182,16 @@ def _missing_bills(session: Session, rule_ids: list[int], model: str) -> set[str
             RuleScore.bill_number == Bill.number,
             RuleScore.model == model,
         )
-        missing.update(session.scalars(select(Bill.number).where(~has_current)))
+        condition = ~has_current
+        if pending:
+            has_fresh = exists().where(
+                RuleScore.rule_id == rule_id,
+                RuleScore.bill_number == Bill.number,
+                RuleScore.model == model,
+                RuleScore.scored_at >= Bill.last_changed_at,
+            )
+            condition = or_(condition, and_(Bill.score_state.in_(PENDING_STATES), ~has_fresh))
+        missing.update(session.scalars(select(Bill.number).where(has_text(), condition)))
     return missing
 
 
@@ -200,21 +246,74 @@ class _Outcome:
         return f"{self.errors[0]}{more}"
 
 
+class _Progress:
+    """Scoring progress in (rule text, bill) pairs: logged, written to the run, committed.
+
+    After each batch ``run.details["progress"] = {"done": n, "total": m}`` is set and the
+    ``commit`` callback (if any) is called, so completed scores survive a crash and the admin
+    page shows how far a running run is.
+    """
+
+    def __init__(self, total: int, run: Run | None, commit: CommitFn | None) -> None:
+        self.total = total
+        self.done = 0
+        self.run = run
+        self.commit = commit
+        self._last_log = time.monotonic()
+        if total:
+            self._write()
+
+    def _write(self) -> None:
+        if self.run is not None:
+            progress = {"done": self.done, "total": self.total}
+            self.run.details = {**(self.run.details or {}), "progress": progress}
+
+    def advance(self, pairs: int, session: Session) -> None:
+        self.done += pairs
+        self._write()
+        session.flush()
+        if self.commit is not None:
+            self.commit()
+        now = time.monotonic()
+        if self.done >= self.total or now - self._last_log >= PROGRESS_LOG_SECONDS:
+            self._last_log = now
+            log.info(
+                "scoring.progress",
+                extra={
+                    "done": self.done,
+                    "total": self.total,
+                    "run_id": self.run.id if self.run is not None else None,
+                },
+            )
+
+
 def _score_groups(
     session: Session,
     scorer: Scorer,
     groups: dict[str, list[int]],
     docs_for: dict[str, list[str]],
     texts: dict[str, str],
+    *,
+    run: Run | None = None,
+    commit: CommitFn | None = None,
 ) -> _Outcome:
-    """One request per distinct rule text (batched); upsert scores; collect failures."""
+    """One request per distinct rule text (batched); upsert scores; collect failures.
+
+    Bills with an empty text are never sent (callers already leave them out). After each
+    batch the progress is written to ``run`` and ``commit`` is called (see ``_Progress``).
+    """
     out = _Outcome()
     size = max(1, int(getattr(scorer, "max_documents", 100) or 100))
     now = _now()
+    docs_for = {
+        query: [n for n in docs_for.get(query, []) if texts.get(n, "").strip()] for query in groups
+    }
+    progress = _Progress(sum(len(d) for d in docs_for.values()), run, commit)
     for query, rule_ids in groups.items():
-        for chunk in _chunks(docs_for.get(query, []), size):
+        for chunk in _chunks(docs_for[query], size):
             if out.unavailable:
                 out.failed.update(chunk)
+                progress.advance(len(chunk), session)
                 continue
             try:
                 scores = scorer.score_many(query, [texts[n] for n in chunk])
@@ -227,6 +326,7 @@ def _score_groups(
                 out.failed.update(chunk)
                 out.errors.append(str(exc))
                 log.error("scoring.unavailable", extra={"error": str(exc)})
+                progress.advance(len(chunk), session)
                 continue
             except ScoringError as exc:
                 out.failed.update(chunk)
@@ -234,10 +334,12 @@ def _score_groups(
                 log.warning(
                     "scoring.request_failed", extra={"error": str(exc), "documents": len(chunk)}
                 )
+                progress.advance(len(chunk), session)
                 continue
             _upsert_rule_scores(session, rule_ids, chunk, scores, scorer.model_name, now)
             out.ok.update(chunk)
             out.rule_ids.update(rule_ids)
+            progress.advance(len(chunk), session)
     return out
 
 
@@ -259,27 +361,37 @@ def _profiles_for_rules(session: Session, rule_ids: Iterable[int]) -> list[Profi
 # -- daily scoring ----------------------------------------------------------------------------
 
 
-def score_pending_bills(session: Session, scorer: Scorer, run: Run | None = None) -> ScoreResult:
-    """Score pending/unscored bills and stale or missing pairs for every rule; update matches."""
+def score_pending_bills(
+    session: Session,
+    scorer: Scorer,
+    run: Run | None = None,
+    *,
+    commit: CommitFn | None = None,
+) -> ScoreResult:
+    """Score pending/unscored bills and stale or missing pairs for every rule; update matches.
+
+    ``commit`` (e.g. ``session.commit``) is called after each scoring batch; without it the
+    function only flushes. Bills without text are left ``pending`` and never sent.
+    """
     result = ScoreResult()
     before = int(getattr(scorer, "billed_units", 0) or 0)
     model = scorer.model_name
 
     pending = set(
-        session.scalars(select(Bill.number).where(Bill.score_state.in_(("pending", "unscored"))))
+        session.scalars(select(Bill.number).where(Bill.score_state.in_(PENDING_STATES), has_text()))
     )
     groups = _rule_groups(session.scalars(select(Rule).order_by(Rule.profile_id, Rule.position)))
     docs_for: dict[str, list[str]] = {}
     needed = set(pending)
     for query, rule_ids in groups.items():
-        docs = pending | _missing_bills(session, rule_ids, model)
+        docs = _bills_to_score(session, rule_ids, model)
         docs_for[query] = sorted(docs)
         needed |= docs
 
     bills = _load_bills(session, needed)
     max_chars = _max_chars(scorer)
     texts = {n: bill_text(b, max_chars) for n, b in bills.items()}
-    outcome = _score_groups(session, scorer, groups, docs_for, texts)
+    outcome = _score_groups(session, scorer, groups, docs_for, texts, run=run, commit=commit)
 
     for number, bill in bills.items():
         if number in outcome.failed:
@@ -292,7 +404,12 @@ def score_pending_bills(session: Session, scorer: Scorer, run: Run | None = None
     session.flush()
 
     default = _default_threshold(scorer)
-    for profile in _profiles_for_rules(session, outcome.rule_ids):
+    # Pending bills whose pairs were all scored by an interrupted earlier run send nothing
+    # now, so their profiles are recomputed too.
+    touched = set(outcome.rule_ids)
+    if pending:
+        touched.update(rid for rule_ids in groups.values() for rid in rule_ids)
+    for profile in _profiles_for_rules(session, touched):
         compute_matches(session, profile, default, model=model)
 
     result.error = outcome.error_message()
@@ -320,8 +437,11 @@ def rescore_profile(
     *,
     force: bool = False,
     run: Run | None = None,
+    commit: CommitFn | None = None,
 ) -> ScoreResult:
     """Score every bill for every rule of a profile, then recompute its matches.
+
+    ``commit`` is called after each scoring batch (see ``score_pending_bills``).
 
     Only pairs without a current-model score are sent (new or edited rules, model switch),
     unless ``force`` is true. Bills whose request failed become ``unscored`` so the next daily
@@ -345,7 +465,9 @@ def rescore_profile(
     for query, rule_ids in groups.items():
         if force:
             if all_numbers is None:
-                all_numbers = list(session.scalars(select(Bill.number).order_by(Bill.number)))
+                all_numbers = list(
+                    session.scalars(select(Bill.number).where(has_text()).order_by(Bill.number))
+                )
             docs_for[query] = all_numbers
         else:
             docs_for[query] = sorted(_missing_bills(session, rule_ids, model))
@@ -353,7 +475,7 @@ def rescore_profile(
     bills = _load_bills(session, {n for docs in docs_for.values() for n in docs})
     max_chars = _max_chars(scorer)
     texts = {n: bill_text(b, max_chars) for n, b in bills.items()}
-    outcome = _score_groups(session, scorer, groups, docs_for, texts)
+    outcome = _score_groups(session, scorer, groups, docs_for, texts, run=run, commit=commit)
 
     for number in outcome.failed:
         bills[number].score_state = "unscored"
@@ -409,8 +531,17 @@ def compute_matches(
         session.flush()
         return 0
 
-    stmt = select(RuleScore.bill_number, func.avg(RuleScore.score)).where(
-        RuleScore.rule_id.in_(rule_ids)
+    # Bills without text are never matched (their old rows, if any, are removed).
+    session.execute(
+        delete(Match).where(
+            Match.profile_id == profile.id,
+            Match.bill_number.in_(select(Bill.number).where(~has_text())),
+        )
+    )
+    stmt = (
+        select(RuleScore.bill_number, func.avg(RuleScore.score))
+        .join(Bill, Bill.number == RuleScore.bill_number)
+        .where(RuleScore.rule_id.in_(rule_ids), has_text())
     )
     if model is not None:
         stmt = stmt.where(RuleScore.model == model)
@@ -534,7 +665,11 @@ def preview_matches(
     threshold: float | None = None,
     limit: int = 50,
 ) -> list[PreviewRow]:
-    """Score unsaved ``rule_texts`` against the ``limit`` most recent bills (by filing date).
+    """Score unsaved ``rule_texts`` against the ``limit`` most recent bills with text.
+
+    "Most recent" is the highest bill number (``models.bill_recency_order``): numbers are
+    assigned at filing, while vote-only records have no filing date.
+
 
     Writes nothing. To keep it cheap while a user types, scores come from (in order) stored
     rule scores of saved rules with the same text and current model, an in-process LRU cache
@@ -551,11 +686,7 @@ def preview_matches(
     unique = list(dict.fromkeys(queries))
     model = scorer.model_name
     bills = list(
-        session.scalars(
-            select(Bill)
-            .order_by(Bill.filing_date.desc().nulls_last(), Bill.number.desc())
-            .limit(limit)
-        )
+        session.scalars(select(Bill).where(has_text()).order_by(*bill_recency_order()).limit(limit))
     )
     if not bills:
         return []

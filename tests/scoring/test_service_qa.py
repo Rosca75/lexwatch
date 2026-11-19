@@ -367,7 +367,8 @@ def test_circuit_open_mid_run_stops_requests_and_keeps_existing_matches(db, owne
     rescore_profile(db, foundry(up), p.id)
     assert matches(db, p)["1001"].matched
 
-    b.score_state = "pending"  # the bill changed upstream
+    b.score_state = "pending"  # the bill changed upstream (ingestion also bumps the time)
+    b.last_changed_at = datetime.now(UTC)
     db.flush()
     up.down = True
     up.requests.clear()
@@ -522,7 +523,8 @@ def test_computed_at_changes_only_when_matched_flips(db, owner):
     db.execute(Match.__table__.update().values(computed_at=OLD))
 
     # both bills change; 1601 stays matched with another score, 1602 stays unmatched
-    b1.score_state = b2.score_state = "pending"
+    b1.score_state = b2.score_state = "pending"  # changed upstream
+    b1.last_changed_at = b2.last_changed_at = datetime.now(UTC)
     db.flush()
     table.update({(R_AML, "1601"): 0.9, (R_AML, "1602"): 0.3})
     score_pending_bills(db, foundry(Foundry(table)), None)
@@ -531,7 +533,8 @@ def test_computed_at_changes_only_when_matched_flips(db, owner):
     assert m["1601"].computed_at == OLD and m["1602"].computed_at == OLD
 
     # 1601 flips to unmatched, 1602 flips to matched
-    b1.score_state = b2.score_state = "pending"
+    b1.score_state = b2.score_state = "pending"  # changed upstream
+    b1.last_changed_at = b2.last_changed_at = datetime.now(UTC)
     db.flush()
     table.update({(R_AML, "1601"): 0.1, (R_AML, "1602"): 0.5})
     score_pending_bills(db, foundry(Foundry(table)), None)

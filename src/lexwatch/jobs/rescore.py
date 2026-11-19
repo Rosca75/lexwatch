@@ -59,7 +59,7 @@ def execute_rescore(
     scorer = scorer or get_scorer(settings)
     before = int(getattr(scorer, "billed_units", 0) or 0)
     try:
-        result = rescore_profile(session, scorer, profile_id, run=run)
+        result = rescore_profile(session, scorer, profile_id, run=run, commit=session.commit)
         run.bills_scored, run.bills_unscored = result.scored, result.unscored
         if result.error is None:
             run.status = "success"
@@ -145,7 +145,9 @@ def execute_rescore_all(
         )
         session.commit()
         try:
-            result = rescore_profile(session, scorer, profile_id, force=True, run=run)
+            result = rescore_profile(
+                session, scorer, profile_id, force=True, run=run, commit=session.commit
+            )
             scored += result.scored
             unscored += result.unscored
             if result.error:

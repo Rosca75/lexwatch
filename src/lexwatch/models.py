@@ -26,6 +26,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    cast,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
@@ -139,6 +140,19 @@ class Bill(Base):
 
     events: Mapped[list[BillEvent]] = relationship(
         back_populates="bill", order_by="BillEvent.changed_at"
+    )
+
+
+def bill_recency_order() -> tuple[Any, ...]:
+    """ORDER BY clauses for "newest first": bill number descending, numeric part then suffix.
+
+    Numbers are assigned at filing, so they give the true filing order, also for vote-only
+    records that have no filing date. ``"8000B"`` > ``"8000A"`` > ``"8000"`` > ``"7999"``.
+    """
+    numeric = func.substring(Bill.number, r"^[0-9]+")
+    return (
+        cast(func.nullif(numeric, ""), Numeric).desc().nulls_last(),
+        Bill.number.collate("C").desc(),
     )
 
 
