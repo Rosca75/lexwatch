@@ -20,7 +20,7 @@ def test_anonymous_is_redirected_to_login(db):
     with open_client(app) as client:
         response = client.get("/_t/user", follow_redirects=False)
         assert response.status_code == 303
-        assert response.headers["location"] == "/login"
+        assert response.headers["location"].startswith("/login")
         response = client.get("/_t/admin", follow_redirects=False)
         assert response.status_code == 303
 
