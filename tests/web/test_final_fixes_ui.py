@@ -1,4 +1,4 @@
-"""Scores and thresholds use one formatter: three decimals, locale decimal separator."""
+"""Final UI fixes: one score formatter (three decimals, locale separator); admin layout."""
 
 from __future__ import annotations
 
@@ -67,3 +67,19 @@ def test_preview_scores_have_three_decimals(client, db, monkeypatch):
     assert response.status_code == 200
     assert ">0,457<" in response.text
     assert "blanchiment : 0,457" in response.text
+
+
+# -- admin page layout -------------------------------------------------------------------------
+
+
+def test_admin_billed_line_sits_under_the_buttons_without_a_heading(client):
+    import re
+
+    html = client.get("/admin").text
+    assert "<h2>État</h2>" not in html
+    # The action buttons are directly followed by the billed-this-month line.
+    assert re.search(r'</div>\s*<dl class="meta">\s*<dt>Facturé ce mois-ci</dt>', html)
+    client.post("/lang", data={"lang": "en", "csrf_token": csrf_token(client)})
+    html = client.get("/admin").text
+    assert "<h2>Status</h2>" not in html
+    assert re.search(r'</div>\s*<dl class="meta">\s*<dt>Billed this month</dt>', html)

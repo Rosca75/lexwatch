@@ -167,6 +167,7 @@ table.bills tr.new td { font-weight: 600; }
 dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 2rem; margin: 0 0 1rem; }
 dl.meta dt { font-weight: 600; }
 dl.meta dd { margin: 0; }
+.actions + dl.meta { margin-top: 1rem; }  /* admin: billed this month under the buttons */
 
 .heading { display: flex; align-items: baseline; gap: 2rem; }
 .heading h1 { margin-right: auto; }
