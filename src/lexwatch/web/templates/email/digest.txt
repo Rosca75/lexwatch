@@ -1,0 +1,1 @@
+{# Stream 4: plain-text digest. Same context as digest.html. #}

@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ status_code }}</h1>
+<p>{% if status_code == 403 %}{{ t('error.forbidden') }}{% elif status_code == 404 %}{{ t('error.not_found') }}{% endif %}</p>
+{% endblock %}

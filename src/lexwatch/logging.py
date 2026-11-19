@@ -38,10 +38,17 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(level: str = "INFO") -> None:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
+    """Install the JSON stdout handler on the root logger (idempotent).
+
+    Other handlers (e.g. pytest's capture handler) are left alone; uvicorn's own handlers are
+    removed so its records propagate to root and come out as JSON too.
+    """
     root = logging.getLogger()
-    root.handlers[:] = [handler]
+    if not any(getattr(h, "_lexwatch", False) for h in root.handlers):
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(JsonFormatter())
+        handler._lexwatch = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
     root.setLevel(level.upper())
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         lg = logging.getLogger(name)

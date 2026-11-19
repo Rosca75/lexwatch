@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ t('app.name') }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  <script src="{{ url_for('static', path='htmx.min.js') }}" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf_token() }}"}'>
+  <header class="topbar">
+    <a class="brand" href="/">{{ t('app.name') }}</a>
+    {% if current_user %}
+    <nav aria-label="{{ t('app.name') }}">
+      <a href="/"{% if request.url.path == '/' or request.url.path.startswith('/bills') %} aria-current="page"{% endif %}>{{ t('nav.bills') }}</a>
+      <a href="/rules"{% if request.url.path.startswith('/rules') %} aria-current="page"{% endif %}>{{ t('nav.rules') }}</a>
+      {% if current_user.is_admin %}
+      <a href="/admin"{% if request.url.path.startswith('/admin') %} aria-current="page"{% endif %}>{{ t('nav.admin') }}</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+    <div class="topbar-end">
+      <form method="post" action="/lang" class="lang-switch">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        {% for code in languages if code != lang %}
+        <button type="submit" name="lang" value="{{ code }}" class="link" lang="{{ code }}">{{ t('lang.' ~ code) }}</button>
+        {% endfor %}
+      </form>
+      {% if current_user %}
+      <form method="post" action="/logout" class="user-menu">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <span>{{ current_user.name or current_user.email }}</span>
+        <button type="submit" class="link">{{ t('nav.logout') }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+  <main id="main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <a href="https://www.chd.lu" rel="noopener">{{ t('footer.source') }}</a>
+  </footer>
+</body>
+</html>
