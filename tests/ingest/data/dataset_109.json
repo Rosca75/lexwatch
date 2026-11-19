@@ -1,0 +1,65 @@
+{
+  "id": "63c67d5dcfa8113ec4793d0c",
+  "slug": "liste-des-votes-en-seances-plenieres",
+  "title": "Liste des votes en séances plénières",
+  "last_update": "2026-11-19T04:30:13+00:00",
+  "last_modified": "2026-11-19T04:30:12.672000+00:00",
+  "resources": [
+    {
+      "id": "25f8e62d-8b95-458a-904d-e0470a2fd92f",
+      "title": "109-votes.zip",
+      "format": "zip",
+      "type": "main",
+      "checksum": {
+        "type": "sha1",
+        "value": "c94e4d2d8699b4ddaea8007de2abaabd199efda4"
+      },
+      "created_at": "2023-01-17T11:50:39.642000+00:00",
+      "last_modified": "2024-07-15T14:31:04.734000+00:00",
+      "url": "https://download.data.public.lu/resources/la-liste-des-votes/20240715-143102/109-votes.zip",
+      "latest": "https://data.public.lu/fr/datasets/r/25f8e62d-8b95-458a-904d-e0470a2fd92f"
+    },
+    {
+      "id": "4904cd65-9747-413f-953c-2eba14df2002",
+      "title": "109-votes.xml",
+      "format": "xml",
+      "type": "main",
+      "checksum": {
+        "type": "sha1",
+        "value": "33d3c05134478e43a31670749998c48da24cb3c5"
+      },
+      "created_at": "2023-01-17T11:50:33.267000+00:00",
+      "last_modified": "2024-07-15T14:31:17.545000+00:00",
+      "url": "https://download.data.public.lu/resources/la-liste-des-votes/20240715-143114/109-votes.xml",
+      "latest": "https://data.public.lu/fr/datasets/r/4904cd65-9747-413f-953c-2eba14df2002"
+    },
+    {
+      "id": "602954f5-af1e-4d3d-80ee-895801c09e10",
+      "title": "109-votes.xlsx",
+      "format": "xlsx",
+      "type": "main",
+      "checksum": {
+        "type": "sha1",
+        "value": "2851ae2e9f3620be1db2bcfcf3d9624134eb203a"
+      },
+      "created_at": "2023-01-17T11:50:23.688000+00:00",
+      "last_modified": "2024-07-15T14:31:30.141000+00:00",
+      "url": "https://download.data.public.lu/resources/la-liste-des-votes/20240715-143127/109-votes.xlsx",
+      "latest": "https://data.public.lu/fr/datasets/r/602954f5-af1e-4d3d-80ee-895801c09e10"
+    },
+    {
+      "id": "d1aba685-67bf-4cce-bdad-140fa11872ac",
+      "title": "109-votes.csv",
+      "format": "csv",
+      "type": "main",
+      "checksum": {
+        "type": "md5",
+        "value": "a6084470e1bf11655567fb7a1d1691f5"
+      },
+      "created_at": "2023-01-17T11:50:11.267000+00:00",
+      "last_modified": "2026-11-19T04:30:13+00:00",
+      "url": "https://download.data.public.lu/resources/liste-des-votes-en-seances-plenieres/20261119-043012/109-votes.csv",
+      "latest": "https://data.public.lu/fr/datasets/r/d1aba685-67bf-4cce-bdad-140fa11872ac"
+    }
+  ]
+}

@@ -70,6 +70,7 @@ class Settings:
     chd_enabled: bool = True
     chd_request_delay_seconds: float = 2.0
     datapublic_api_url: str = "https://data.public.lu/api/1/"
+    datapublic_request_delay_seconds: float = 1.0
     https_proxy: str = ""  # httpx also honours HTTPS_PROXY from the environment
 
     # --- scoring -------------------------------------------------------------------------
@@ -152,6 +153,9 @@ class Settings:
                 e.get("CHD_REQUEST_DELAY_SECONDS"), d.chd_request_delay_seconds
             ),
             datapublic_api_url=_str(e.get("DATAPUBLIC_API_URL"), d.datapublic_api_url),
+            datapublic_request_delay_seconds=_float(
+                e.get("DATAPUBLIC_REQUEST_DELAY_SECONDS"), d.datapublic_request_delay_seconds
+            ),
             https_proxy=_str(e.get("HTTPS_PROXY")),
             scorer=_str(e.get("SCORER"), d.scorer).lower(),
             default_threshold=_float(e.get("DEFAULT_THRESHOLD"), d.default_threshold),
