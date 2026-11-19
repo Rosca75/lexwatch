@@ -35,8 +35,11 @@ log = logging.getLogger(__name__)
 TOKENIZER_FILE = "tokenizer.json"
 HF_BASE_URL = "https://huggingface.co"
 # Default profile threshold for this scorer when DEFAULT_THRESHOLD is not set. Calibrated on
-# real French bill titles against French rule texts (see the scoring notes in DECISIONS.md).
-LOCAL_DEFAULT_THRESHOLD = 0.2
+# the 250 most recent bills of dataset 121 (title + author line) against 4 French profiles of
+# 1 to 3 rules: the profile mean of unrelated bills stays below 0.02 (95th percentile 0.005 to
+# 0.02), while bills a reader would call relevant score 0.05 to 0.75. bge sigmoid scores are
+# very peaked, so the cut-off is far below Cohere Rerank 5's calibrated 0.5.
+LOCAL_DEFAULT_THRESHOLD = 0.05
 _XLMR_PAD_ID = 1
 
 
