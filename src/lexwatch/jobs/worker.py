@@ -3,14 +3,19 @@
 Every ``WORKER_POLL_SECONDS`` it checks, in order:
 (a) the daily job: local time (``APP_TIMEZONE``) >= ``DAILY_JOB_TIME`` and no ``daily`` run
     started today (local date) -> run it;
-(b) runs with ``status='queued'`` (admin "Run now") -> claim with ``SELECT ... FOR UPDATE SKIP
-    LOCKED`` and execute;
+(b) runs with ``status='queued'`` -> claim with ``SELECT ... FOR UPDATE SKIP LOCKED`` and
+    execute: ``manual`` (admin "Run now") runs the daily job, ``rescore`` (admin "Rescore
+    all", ``details={"force": true}``) force-rescores every profile
+    (``jobs.rescore.execute_rescore_all``);
 (c) profiles with ``rescore_status='pending'`` -> set ``running``, rescore inside a
     ``runs(kind='rescore')`` row (``jobs.rescore.execute_rescore``), then set ``idle`` only if
     still ``running`` (compare-and-set: a profile saved during the rescore stays ``pending``).
     A failed rescore is recorded in its run and not retried here; its unscored bills/pairs are
     picked up by the next daily run.
 Only one worker replica is expected; the row locks make a second one harmless.
+
+At startup the worker also recomputes the matches of profiles without their own threshold
+(no scoring requests), so a changed ``DEFAULT_THRESHOLD`` or scorer default takes effect.
 """
 
 from __future__ import annotations
@@ -73,7 +78,7 @@ def claim_pending_rescore(session: Session) -> Profile | None:
 def tick(session: Session, settings: Settings) -> None:
     """One polling iteration (testable)."""
     from lexwatch.jobs.daily import create_run, execute_run
-    from lexwatch.jobs.rescore import execute_rescore, finish_rescore_status
+    from lexwatch.jobs.rescore import execute_rescore, execute_rescore_all, finish_rescore_status
 
     if daily_due(session, settings):
         run = create_run(session, "daily")
@@ -82,7 +87,10 @@ def tick(session: Session, settings: Settings) -> None:
 
     run = claim_queued_run(session)
     if run is not None:
-        execute_run(session, run, settings)
+        if run.kind == "rescore":
+            execute_rescore_all(session, settings, run)
+        else:
+            execute_run(session, run, settings)
 
     profile = claim_pending_rescore(session)
     if profile is not None:
@@ -141,6 +149,13 @@ def run_worker(settings: Settings) -> None:
             recover_interrupted(session)
     except Exception:
         log.exception("worker.recover_failed")
+    try:
+        from lexwatch.jobs.rescore import recompute_default_threshold_matches
+
+        with factory() as session:
+            recompute_default_threshold_matches(session, settings)
+    except Exception:
+        log.exception("worker.recompute_matches_failed")
     while not stop.is_set():
         try:
             with factory() as session:

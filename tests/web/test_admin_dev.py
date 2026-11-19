@@ -59,11 +59,12 @@ def test_admin_page_shows_runs_sources_and_units(client, db):
     assert "2 min 00 s" in html
     assert "parse error" in html and "812" in html
     assert "scoring: circuit open" in html and "<details>" in html
-    assert "1500 input_tokens" in html
+    assert "1500 jetons" in html
     assert "Partiel" in html
     client.post("/lang", data={"lang": "en", "csrf_token": csrf_token(client)})
     html = client.get("/admin").text
     assert "Last runs" in html and "Partial" in html
+    assert "1500 tokens" in html
 
 
 def test_run_now_inserts_queued_manual_run(client, db):
@@ -126,3 +127,34 @@ def test_export_matches_csv(client, db):
         "computed_at",
     ]
     assert rows[1][:6] == [str(profile.id), "AML", "8901", "T", "0.7500", "1"]
+
+
+def test_preview_runs_count_in_month_total_but_are_not_listed(client, db):
+    _run(db, billed_units=100, details={"billing": {"unit": "search_units"}})
+    _run(db, kind="preview", billed_units=7, details={"billing": {"unit": "search_units"}})
+    html = client.get("/admin").text
+    assert "107 unités de recherche" in html
+    assert "Aperçu" not in html  # the preview run is not in the runs table
+    assert html.count("<td>Quotidien</td>") == 1
+
+
+def test_state_lines_shown_only_when_nonzero(client, db):
+    make_bill(db, "8801", score_state="scored")
+    html = client.get("/admin").text
+    assert "Facturé ce mois-ci" in html
+    for label in ("Non évalués", "Scores d’un ancien modèle", "Profils en réévaluation"):
+        assert label not in html
+    assert "Projets de loi</dt>" not in html and "En attente d’évaluation" not in html
+    make_bill(db, "8802", score_state="unscored")
+    profile = make_profile(db, dev_user(db, "admin"), "A")
+    profile.rescore_status = "pending"
+    db.flush()
+    html = client.get("/admin").text
+    assert "Non évalués" in html and "Profils en réévaluation" in html
+
+
+def test_rescore_all_is_secondary_and_warns_about_cost(client):
+    html = client.get("/admin").text
+    form = html.split('action="/admin/rescore"', 1)[1].split("</form>", 1)[0]
+    assert 'class="link"' in form and 'class="primary"' not in form
+    assert "peut entraîner un coût" in form

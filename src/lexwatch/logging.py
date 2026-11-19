@@ -44,7 +44,8 @@ def configure_logging(level: str = "INFO") -> None:
     """Install the JSON stdout handler on the root logger (idempotent).
 
     Other handlers (e.g. pytest's capture handler) are left alone; uvicorn's own handlers are
-    removed so its records propagate to root and come out as JSON too.
+    removed so its records propagate to root and come out as JSON too, except its access log,
+    which is silenced.
     """
     root = logging.getLogger()
     if not any(getattr(h, "_lexwatch", False) for h in root.handlers):
@@ -53,7 +54,13 @@ def configure_logging(level: str = "INFO") -> None:
         handler._lexwatch = True  # type: ignore[attr-defined]
         root.addHandler(handler)
     root.setLevel(level.upper())
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    for name in ("uvicorn", "uvicorn.error"):
         lg = logging.getLogger(name)
         lg.handlers[:] = []
         lg.propagate = True
+    # uvicorn's access log records the client IP address (personal data, spec section 8).
+    # With no handler and no propagation uvicorn skips it entirely (its protocols check
+    # ``hasHandlers()``); the app logs ``http.request`` with the user id instead.
+    access = logging.getLogger("uvicorn.access")
+    access.handlers[:] = []
+    access.propagate = False

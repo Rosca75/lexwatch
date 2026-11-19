@@ -13,18 +13,16 @@
       {% if show_owner %}<th scope="col">{{ t('rules.col.owner') }}</th>{% endif %}
       <th scope="col" class="num">{{ t('rules.col.rules') }}</th>
       <th scope="col" class="num">{{ t('rules.col.threshold') }}</th>
-      <th scope="col">{{ t('rules.col.state') }}</th>
     </tr>
   </thead>
   <tbody>
     {% for row in rows %}
     {% set p = row.profile %}
     <tr>
-      <td><a href="/rules/{{ p.id }}">{{ p.name }}</a></td>
+      <td><a href="/rules/{{ p.id }}">{{ p.name }}</a> {% include "rules/_status.html" %}</td>
       {% if show_owner %}<td>{{ p.owner.name or p.owner.email }}</td>{% endif %}
       <td class="num">{{ row.rule_count }}</td>
-      <td class="num">{% if p.threshold is not none %}{{ fmt(p.threshold) }}{% else %}<span class="hint" tabindex="0" title="{{ t('rules.threshold.default') }}" aria-describedby="default-help">{{ default_threshold }}</span>{% endif %}</td>
-      {% include "rules/_status.html" %}
+      <td class="num">{% if p.threshold is not none %}{{ fmt(p.threshold) }}{% else %}<span class="hint" tabindex="0" data-tip="{{ t('rules.threshold.default') }}" aria-describedby="default-help">{{ default_threshold }}</span>{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

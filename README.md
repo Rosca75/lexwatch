@@ -108,7 +108,7 @@ lists them all with comments. An empty value means "use the default".
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `lexwatch` each (in compose) | Used by the `db` container. Compose builds `DATABASE_URL` from them. Set a real password. |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `lexwatch` (user, database); password required | Used by the `db` container. Compose builds `DATABASE_URL` from them and refuses to start without `POSTGRES_PASSWORD` (URL-safe characters). |
 | `DATABASE_URL` | `postgresql+psycopg://lexwatch:lexwatch@localhost:5432/lexwatch` | Set it yourself only outside compose (compose overrides it). |
 | `APP_PORT` | `8000` | Host port of the `app` container. |
 | `LEXWATCH_TAG` | `latest` | Tag of the locally built image (compose only). |
@@ -143,7 +143,7 @@ lists them all with comments. An empty value means "use the default".
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SCORER` | `foundry` | `foundry`, `local` or `fake` (development only). |
+| `SCORER` | `foundry` | `foundry`, `local` or `fake` (development only, refused when `ENV=production`). |
 | `DEFAULT_THRESHOLD` | scorer default | Threshold for profiles without their own. Empty: Rerank 5 Pro 0.5, Rerank 5 Fast 0.45, Rerank 4 0.5 (uncalibrated), local 0.05, fake 0.3. |
 | `SCORING_MAX_CHARS` | `4000` | Maximum characters of bill text sent to the scorer. |
 | `FOUNDRY_ENDPOINT` | | Rerank URL, see [Foundry setup](#foundry-setup). |

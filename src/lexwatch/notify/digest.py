@@ -304,8 +304,11 @@ def send_digests_report(
             )
             mailer.send_message(settings, message)
         except (mailer.MailerError, ValueError) as exc:
-            log.error("digest.send_failed", extra={"profile_id": profile.id, "error": str(exc)})
-            report.failed[profile.id] = str(exc)
+            # MailerError messages hold the type and SMTP code only; a ValueError from the
+            # email package may quote an address, so only its type is kept.
+            error = str(exc) if isinstance(exc, mailer.MailerError) else type(exc).__name__
+            log.error("digest.send_failed", extra={"profile_id": profile.id, "error": error})
+            report.failed[profile.id] = error
             continue
         profile.last_digest_at = now
         session.commit()

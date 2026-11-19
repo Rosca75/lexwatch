@@ -70,6 +70,8 @@ def cmd_serve(settings: Settings, args: argparse.Namespace) -> int:
         proxy_headers=True,
         forwarded_allow_ips="*",
         log_config=None,
+        # No client IP in the logs: the app logs http.request (method, path, status, user id).
+        access_log=False,
     )
     return 0
 
@@ -93,15 +95,18 @@ def cmd_rescore(settings: Settings, args: argparse.Namespace) -> int:
     from sqlalchemy import select
 
     from lexwatch.db import get_engine, make_sessionmaker, session_scope
-    from lexwatch.jobs.rescore import execute_rescore, mark_all_pending
+    from lexwatch.jobs.rescore import execute_rescore, queue_rescore_all
     from lexwatch.models import Profile
     from lexwatch.scoring.factory import get_scorer
 
     factory = make_sessionmaker(get_engine(settings.database_url))
     with session_scope(factory) as session:
         if args.all:
-            count = mark_all_pending(session)
-            print(f"queued {count} profile(s) for the worker")
+            run = queue_rescore_all(session)
+            if run is None:
+                print("a full rescore is already queued for the worker")
+            else:
+                print(f"queued run {run.id}: the worker will rescore every profile in full")
             return 0
         ids = (
             [args.profile]
@@ -177,9 +182,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Rescore now, in this process: every profile (default) or one (--profile). Each "
             "profile gets a runs row (kind=rescore) with its billed units. Only pairs without a "
             "current-model score are sent (new/edited rules, model switch). Exit code 1 when "
-            "a rescore failed or was partial. With --all, nothing is scored here: every "
-            "profile is queued (rescore_status=pending) for the worker, like the admin "
-            "'Rescore all' button."
+            "a rescore failed or was partial. With --all, nothing is scored here: a forced "
+            "rescore of every profile (all bills sent again) is queued for the worker, like "
+            "the admin 'Rescore all' button."
         ),
     )
     target = p.add_mutually_exclusive_group()
@@ -187,7 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     target.add_argument(
         "--all",
         action="store_true",
-        help="queue every profile for the worker instead of rescoring now",
+        help="queue a full (forced) rescore of every profile for the worker",
     )
     p.set_defaults(func=cmd_rescore)
 

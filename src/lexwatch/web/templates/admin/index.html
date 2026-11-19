@@ -11,19 +11,17 @@
   </form>
   <form method="post" action="/admin/rescore">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="primary" title="{{ t('admin.rescore_all.help') }}" aria-describedby="rescore-help">{{ t('admin.rescore_all') }}</button>
+    <button type="submit" class="link" title="{{ t('admin.rescore_all.help') }}" aria-describedby="rescore-help">{{ t('admin.rescore_all') }}</button>
     <span id="rescore-help" class="visually-hidden">{{ t('admin.rescore_all.help') }}</span>
   </form>
 </div>
 
 <h2>{{ t('admin.state') }}</h2>
 <dl class="meta">
-  <dt>{{ t('admin.state.bills') }}</dt><dd>{{ bills_total }}</dd>
-  <dt>{{ t('admin.state.pending') }}</dt><dd>{{ bills_pending }}</dd>
-  <dt><span class="hint" tabindex="0" title="{{ t('admin.state.unscored.help') }}" aria-describedby="unscored-help">{{ t('admin.state.unscored') }}</span><span id="unscored-help" class="visually-hidden">{{ t('admin.state.unscored.help') }}</span></dt><dd>{{ bills_unscored }}</dd>
-  {% if stale_scores is not none %}<dt>{{ t('admin.state.stale') }}</dt><dd>{{ stale_scores }}</dd>{% endif %}
-  <dt>{{ t('admin.state.rescoring') }}</dt><dd>{{ rescoring }}</dd>
   <dt>{{ t('admin.state.units') }}</dt><dd>{{ month_units }}{% if unit %} {{ unit }}{% endif %}</dd>
+  {% if bills_unscored %}<dt><span class="hint" tabindex="0" data-tip="{{ t('admin.state.unscored.help') }}" aria-describedby="unscored-help">{{ t('admin.state.unscored') }}</span><span id="unscored-help" class="visually-hidden">{{ t('admin.state.unscored.help') }}</span></dt><dd>{{ bills_unscored }}</dd>{% endif %}
+  {% if stale_scores %}<dt>{{ t('admin.state.stale') }}</dt><dd>{{ stale_scores }}</dd>{% endif %}
+  {% if rescoring %}<dt>{{ t('admin.state.rescoring') }}</dt><dd>{{ rescoring }}</dd>{% endif %}
 </dl>
 
 {% if sources %}

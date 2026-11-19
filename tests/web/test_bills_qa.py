@@ -330,7 +330,7 @@ def test_detail_per_rule_scores_on_hover(user_client, db, me):
     bill = make_bill(db)
     make_match(db, profile, bill, 0.7)
     page = user_client.get(f"/bills/{bill.number}").text
-    hint = re.search(r'<span[^>]*title="([^"]*)"[^>]*aria-describedby="([^"]+)"', page)
+    hint = re.search(r'<span[^>]*data-tip="([^"]*)"[^>]*aria-describedby="([^"]+)"', page)
     assert hint, "per-rule scores are not on a hover element"
     assert "regle un" in hint.group(1) and "regle deux" in hint.group(1)
     assert f'id="{hint.group(2)}"' in page

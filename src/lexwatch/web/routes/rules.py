@@ -8,8 +8,10 @@ profile does not exist).
 
 The edit form works without JavaScript: the add, remove, up and down buttons post the
 unsaved form back with an ``action`` and the page is rendered again with the change applied;
-only ``save`` writes. The preview (``POST /rules/preview``) is an htmx fragment, also
-reachable without JavaScript through the ``preview`` action.
+only ``save`` writes. The preview (``POST /rules/preview``) is an htmx fragment loaded when the
+user clicks "Preview" (never on typing: each preview may cost scoring requests), also
+reachable without JavaScript through the ``preview`` action. A preview that billed units
+writes one ``runs`` row with ``kind='preview'`` so the admin monthly total stays complete.
 """
 
 from __future__ import annotations
@@ -27,7 +29,8 @@ from sqlalchemy.orm import Session
 
 from lexwatch.db import get_db
 from lexwatch.i18n import t
-from lexwatch.models import Profile, Rule, User
+from lexwatch.jobs.daily import utcnow
+from lexwatch.models import Profile, Rule, Run, User
 from lexwatch.scoring import service as scoring_service
 from lexwatch.scoring.base import ScoringError
 from lexwatch.scoring.factory import default_threshold_for, get_scorer, scorer_configured
@@ -266,7 +269,8 @@ async def preview(
     request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)
 ):
     form, _ = await ProfileForm.from_request(request)
-    return render(request, "rules/_preview.html", {"preview": run_preview(request, db, form)})
+    data = run_preview(request, db, form, user)
+    return render(request, "rules/_preview.html", {"preview": data})
 
 
 @router.get("/{profile_id}")
@@ -342,7 +346,7 @@ async def _handle_form(
     profile: Profile | None,
 ) -> Response:
     if action == "preview":
-        preview_data = run_preview(request, db, form)
+        preview_data = run_preview(request, db, form, user)
         return render(
             request, "rules/edit.html", _form_context(request, form, profile, preview=preview_data)
         )
@@ -417,8 +421,41 @@ def _recompute_matches(request: Request, db: Session, profile: Profile) -> None:
         profile.rescore_status = "pending"
 
 
-def run_preview(request: Request, db: Session, form: ProfileForm) -> dict[str, Any]:
-    """Score the unsaved rules against recent bills; returns template data (never raises)."""
+def _record_preview_billing(db: Session, scorer: Any, user: User) -> None:
+    """One ``runs`` row (kind ``preview``) per preview that billed units, for the monthly total.
+
+    Previews served entirely from stored scores or the in-process cache bill nothing and leave
+    no row. Never raises: a failed insert must not break the preview.
+    """
+    units = int(getattr(scorer, "billed_units", 0) or 0)
+    if units <= 0:
+        return
+    try:
+        now = utcnow()
+        unit = getattr(scorer, "billing_unit", None)
+        db.add(
+            Run(
+                kind="preview",
+                status="success",
+                requested_by=user.id,
+                started_at=now,
+                finished_at=now,
+                billed_units=units,
+                details={"billing": {"unit": unit}} if unit else {},
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception("rules.preview_billing_failed", extra={"user_id": user.id})
+
+
+def run_preview(request: Request, db: Session, form: ProfileForm, user: User) -> dict[str, Any]:
+    """Score the unsaved rules against recent bills; returns template data (never raises).
+
+    Billed units of the scoring requests are recorded as a ``preview`` run, even when the
+    preview fails part-way (the requests that succeeded were billed).
+    """
     texts = form.rule_texts()
     if not texts:
         return {"error": "rules.preview.no_rules"}
@@ -432,6 +469,7 @@ def run_preview(request: Request, db: Session, form: ProfileForm) -> dict[str, A
     )
     if not scorer_configured(settings):
         return {"error": "rules.preview.unavailable"}
+    scorer = None
     try:
         scorer = get_scorer(settings)
         rows = scoring_service.preview_matches(db, scorer, texts, threshold, limit=PREVIEW_LIMIT)
@@ -443,6 +481,9 @@ def run_preview(request: Request, db: Session, form: ProfileForm) -> dict[str, A
     except Exception:
         log.exception("rules.preview_failed")
         return {"error": "rules.preview.failed"}
+    finally:
+        if scorer is not None:
+            _record_preview_billing(db, scorer, user)
     lang = get_lang(request)
     matched = [
         {

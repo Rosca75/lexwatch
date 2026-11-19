@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 
 import pytest
@@ -190,11 +191,15 @@ def test_rescore_state_cell_polls_while_pending(client, db):
     profile.rescore_status = "pending"
     db.flush()
     html = client.get("/rules").text
-    assert f'hx-get="/rules/{profile.id}/status"' in html and "En cours" in html
+    assert f'hx-get="/rules/{profile.id}/status"' in html and "réévaluation en cours" in html
+    # Shown after the profile name (no separate column); the only polled element.
+    assert re.search(r'>AML</a>\s*<span id="status-\d+" class="status" hx-get', html)
+    assert html.count("hx-trigger") == 1
+    assert '<th scope="col">Évaluation</th>' not in html
     profile.rescore_status = "idle"
     db.flush()
     cell = client.get(f"/rules/{profile.id}/status").text
-    assert "hx-get" not in cell and "En cours" not in cell
+    assert "hx-get" not in cell and "en cours" not in cell
 
 
 def test_delete_with_confirmation(client, db):
@@ -340,3 +345,38 @@ def test_profile_without_rules_is_rejected(user_client, db):
     assert response.status_code == 422
     assert "Ajoutez au moins une règle." in response.text
     assert db.scalar(select(Profile)) is None
+
+
+def _preview_runs(db):
+    from lexwatch.models import Run
+
+    return list(db.scalars(select(Run).where(Run.kind == "preview").order_by(Run.id)))
+
+
+def test_preview_records_billed_units_as_a_preview_run(client, db):
+    scoring_service.clear_preview_cache()
+    make_bill(db, "8601", title="Lutte contre le blanchiment de capitaux")
+    data = {"rule_text": ["blanchiment capitaux"], "name": "x", "csrf_token": csrf_token(client)}
+    assert "/bills/8601" in client.post("/rules/preview", data=data).text
+    (run,) = _preview_runs(db)
+    assert (run.status, run.requested_by) == ("success", dev_user(db, "admin").id)
+    assert run.billed_units >= 1 and run.started_at == run.finished_at is not None
+    # Served from the preview cache: nothing billed, no new run.
+    client.post("/rules/preview", data=data)
+    assert len(_preview_runs(db)) == 1
+    scoring_service.clear_preview_cache()
+
+
+def test_preview_with_nothing_billed_records_no_run(client, db, monkeypatch):
+    monkeypatch.setattr(scoring_service, "preview_matches", lambda *a, **k: [])
+    client.post("/rules/preview", data={"rule_text": ["x"], "csrf_token": csrf_token(client)})
+    assert _preview_runs(db) == []
+
+
+def test_preview_is_triggered_by_the_button_only(client):
+    html = client.get("/rules/new").text
+    assert "hx-trigger" not in html
+    button = html.split('value="preview"', 1)[1].split(">", 1)[0]
+    assert 'hx-post="/rules/preview"' in button
+    section = html.split('id="preview"', 1)[1].split(">", 1)[0]
+    assert "hx-post" not in section

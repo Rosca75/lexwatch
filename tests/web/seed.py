@@ -10,6 +10,7 @@ Then serve with ``DEV_AUTH=true SCORER=fake DATABASE_URL=... uv run lexwatch ser
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import UTC, date, datetime, timedelta
 
@@ -17,7 +18,9 @@ from alembic import command
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from lexwatch.config import Settings
 from lexwatch.models import Bill, BillEvent, Match, Profile, Rule, RuleScore, Run, User
+from lexwatch.scoring.factory import default_threshold_for
 from lexwatch.scoring.fake import FakeScorer
 from lexwatch.scoring.text import bill_text
 from tests.conftest import alembic_config
@@ -125,7 +128,11 @@ def seed(url: str) -> None:
         conn.execute(text("CREATE SCHEMA public"))
     command.upgrade(alembic_config(url), "head")
     now = datetime.now(UTC)
-    scorer = FakeScorer()
+    # Scores are stored as model "fake": use the fake scorer's default threshold (or
+    # DEFAULT_THRESHOLD when set), the same one the app and the worker use.
+    settings = Settings.from_env({**os.environ, "SCORER": "fake"})
+    default_threshold = default_threshold_for(settings)
+    scorer = FakeScorer(default_threshold=default_threshold)
     with Session(engine) as db:
         users = {
             "admin": User(
@@ -212,7 +219,8 @@ def seed(url: str) -> None:
                         profile_id=profile.id,
                         bill_number=bill.number,
                         profile_score=mean,
-                        matched=mean >= (threshold if threshold is not None else 0.2),
+                        matched=mean
+                        >= (float(threshold) if threshold is not None else default_threshold),
                     )
                 )
         db.query(Profile).filter(Profile.name == "Aménagement du territoire").update(

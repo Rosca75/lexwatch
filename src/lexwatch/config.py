@@ -205,6 +205,10 @@ class Settings:
             raise ValueError("SECRET_KEY must be set when ENV=production")
         if self.scorer not in {"foundry", "local", "fake"}:
             raise ValueError(f"SCORER must be foundry, local or fake (got {self.scorer!r})")
+        if self.is_production and self.scorer == "fake":
+            raise ValueError(
+                "SCORER=fake (keyword overlap, for development) is refused in production"
+            )
         if self.default_language not in {"fr", "en"}:
             raise ValueError("DEFAULT_LANGUAGE must be fr or en")
 

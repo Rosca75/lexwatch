@@ -190,7 +190,7 @@ def test_cookie_flags_in_development(db):
 
 
 def test_cookie_flags_in_production(db):
-    settings = oidc_settings(env="production", secret_key="k" * 40, dev_auth=False)
+    settings = oidc_settings(env="production", secret_key="k" * 40, dev_auth=False, scorer="local")
     provider = FakeProvider()
     app = build_app(settings, db, provider)
     with TestClient(app, base_url="https://testserver") as client:
