@@ -73,7 +73,11 @@ class Settings:
 
     # --- scoring -------------------------------------------------------------------------
     scorer: str = "foundry"  # foundry | local | fake
+    # Profile threshold used when a profile has none. When DEFAULT_THRESHOLD is not set, the
+    # scorer's own default applies (see lexwatch.scoring.factory.default_threshold_for);
+    # ``default_threshold_explicit`` records whether the operator set it.
     default_threshold: float = 0.5
+    default_threshold_explicit: bool = False
     scoring_max_chars: int = 4000
     foundry_endpoint: str = (
         ""  # https://<resource>.services.ai.azure.com/providers/cohere/v2/rerank
@@ -84,8 +88,15 @@ class Settings:
     foundry_timeout_seconds: float = 30.0
     foundry_max_retries: int = 4
     foundry_max_documents: int = 100
+    foundry_api_key_header: str = "Authorization"  # Authorization (Bearer) | api-key
+    foundry_max_tokens_per_doc: int = 0  # 0 = omit (server default 4096)
+    foundry_circuit_threshold: int = 3  # consecutive failed requests that open the breaker
     local_model_dir: str = "/models/bge-reranker-v2-m3"
     local_model_repo: str = "onnx-community/bge-reranker-v2-m3-ONNX"
+    local_model_revision: str = "6f5ff65298512715a1e669753bc754d2bc8f367b"
+    local_model_file: str = "onnx/model_int8.onnx"
+    local_max_length: int = 512
+    local_batch_size: int = 8
 
     # --- email ---------------------------------------------------------------------------
     smtp_host: str = ""
@@ -141,6 +152,7 @@ class Settings:
             https_proxy=_str(e.get("HTTPS_PROXY")),
             scorer=_str(e.get("SCORER"), d.scorer).lower(),
             default_threshold=_float(e.get("DEFAULT_THRESHOLD"), d.default_threshold),
+            default_threshold_explicit=bool(_str(e.get("DEFAULT_THRESHOLD"))),
             scoring_max_chars=_int(e.get("SCORING_MAX_CHARS"), d.scoring_max_chars),
             foundry_endpoint=_str(e.get("FOUNDRY_ENDPOINT")),
             foundry_model=_str(e.get("FOUNDRY_MODEL"), d.foundry_model),
@@ -151,8 +163,19 @@ class Settings:
             ),
             foundry_max_retries=_int(e.get("FOUNDRY_MAX_RETRIES"), d.foundry_max_retries),
             foundry_max_documents=_int(e.get("FOUNDRY_MAX_DOCUMENTS"), d.foundry_max_documents),
+            foundry_api_key_header=_str(e.get("FOUNDRY_API_KEY_HEADER"), d.foundry_api_key_header),
+            foundry_max_tokens_per_doc=_int(
+                e.get("FOUNDRY_MAX_TOKENS_PER_DOC"), d.foundry_max_tokens_per_doc
+            ),
+            foundry_circuit_threshold=_int(
+                e.get("FOUNDRY_CIRCUIT_THRESHOLD"), d.foundry_circuit_threshold
+            ),
             local_model_dir=_str(e.get("LOCAL_MODEL_DIR"), d.local_model_dir),
             local_model_repo=_str(e.get("LOCAL_MODEL_REPO"), d.local_model_repo),
+            local_model_revision=_str(e.get("LOCAL_MODEL_REVISION"), d.local_model_revision),
+            local_model_file=_str(e.get("LOCAL_MODEL_FILE"), d.local_model_file),
+            local_max_length=_int(e.get("LOCAL_MAX_LENGTH"), d.local_max_length),
+            local_batch_size=_int(e.get("LOCAL_BATCH_SIZE"), d.local_batch_size),
             smtp_host=_str(e.get("SMTP_HOST")),
             smtp_port=_int(e.get("SMTP_PORT"), d.smtp_port),
             smtp_username=_str(e.get("SMTP_USERNAME")),

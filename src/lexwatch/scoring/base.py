@@ -21,7 +21,9 @@ class ScorerUnavailable(ScoringError):
 class Scorer(Protocol):
     model_name: str  # stored with every rule score (rule_scores.model)
     max_documents: int  # max documents per upstream request
-    billed_units: int  # accumulated usage (e.g. Cohere search_units) across calls
+    billed_units: int  # accumulated usage (search_units or input_tokens) across calls
+    billing_unit: str | None  # "search_units" | "input_tokens" | None (nothing billed/reported)
+    default_threshold: float  # profile threshold when the profile has none (see factory)
 
     def score_many(self, rule_text: str, bill_texts: list[str]) -> list[float]:
         """Return one score in [0, 1] per bill text, in order.
