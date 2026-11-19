@@ -1,0 +1,22 @@
+{# Shared formatting helpers. Import with: {% import "_macros.html" as m with context %} #}
+
+{# Translated label for a normalized value (bill.type.*, bill.status.*), raw value if unknown. #}
+{% macro label(prefix, value) -%}
+{%- if value -%}
+{%- set key = prefix ~ '.' ~ value -%}
+{%- set text = t(key) -%}
+{{ value if text == key else text }}
+{%- endif -%}
+{%- endmacro %}
+
+{# Scores and thresholds: two decimals, locale decimal separator. #}
+{% macro score(value) -%}
+{%- if value is not none -%}
+{%- set s = '%.2f' | format(value) -%}
+{{ s.replace('.', ',') if lang == 'fr' else s }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro date(value) -%}
+{%- if value -%}{{ value.isoformat() }}{%- endif -%}
+{%- endmacro %}
