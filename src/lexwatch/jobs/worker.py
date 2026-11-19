@@ -5,7 +5,11 @@ Every ``WORKER_POLL_SECONDS`` it checks, in order:
     started today (local date) -> run it;
 (b) runs with ``status='queued'`` (admin "Run now") -> claim with ``SELECT ... FOR UPDATE SKIP
     LOCKED`` and execute;
-(c) profiles with ``rescore_status='pending'`` -> set ``running``, rescore, set ``idle``.
+(c) profiles with ``rescore_status='pending'`` -> set ``running``, rescore inside a
+    ``runs(kind='rescore')`` row (``jobs.rescore.execute_rescore``), then set ``idle`` only if
+    still ``running`` (compare-and-set: a profile saved during the rescore stays ``pending``).
+    A failed rescore is recorded in its run and not retried here; its unscored bills/pairs are
+    picked up by the next daily run.
 Only one worker replica is expected; the row locks make a second one harmless.
 """
 
@@ -69,8 +73,7 @@ def claim_pending_rescore(session: Session) -> Profile | None:
 def tick(session: Session, settings: Settings) -> None:
     """One polling iteration (testable)."""
     from lexwatch.jobs.daily import create_run, execute_run
-    from lexwatch.scoring.factory import get_scorer
-    from lexwatch.scoring.service import rescore_profile
+    from lexwatch.jobs.rescore import execute_rescore, finish_rescore_status
 
     if daily_due(session, settings):
         run = create_run(session, "daily")
@@ -83,16 +86,16 @@ def tick(session: Session, settings: Settings) -> None:
 
     profile = claim_pending_rescore(session)
     if profile is not None:
+        profile_id = profile.id
         profile.rescore_status = "running"
         session.commit()
         try:
-            rescore_profile(session, get_scorer(settings), profile.id)
+            execute_rescore(session, settings, profile_id)
         except Exception:
             session.rollback()
-            log.exception("worker.rescore_failed", extra={"profile_id": profile.id})
+            log.exception("worker.rescore_failed", extra={"profile_id": profile_id})
         finally:
-            profile.rescore_status = "idle"
-            session.commit()
+            finish_rescore_status(session, profile_id)
 
 
 def run_worker(settings: Settings) -> None:

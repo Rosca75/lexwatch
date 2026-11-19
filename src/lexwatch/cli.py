@@ -1,6 +1,6 @@
 """``lexwatch`` console script.
 
-Commands: migrate | serve | worker | run-job | rescore [--profile ID] | download-model |
+Commands: migrate | serve | worker | run-job | rescore [--profile ID | --all] | download-model |
 send-digest [--dry-run]
 """
 
@@ -93,22 +93,33 @@ def cmd_rescore(settings: Settings, args: argparse.Namespace) -> int:
     from sqlalchemy import select
 
     from lexwatch.db import get_engine, make_sessionmaker, session_scope
+    from lexwatch.jobs.rescore import execute_rescore, mark_all_pending
     from lexwatch.models import Profile
     from lexwatch.scoring.factory import get_scorer
-    from lexwatch.scoring.service import rescore_profile
 
     factory = make_sessionmaker(get_engine(settings.database_url))
     with session_scope(factory) as session:
+        if args.all:
+            count = mark_all_pending(session)
+            print(f"queued {count} profile(s) for the worker")
+            return 0
         ids = (
             [args.profile]
             if args.profile is not None
             else list(session.scalars(select(Profile.id).order_by(Profile.id)))
         )
         scorer = get_scorer(settings)
+        failed = 0
         for profile_id in ids:
-            rescore_profile(session, scorer, profile_id)
-            session.commit()
-    return 0
+            run = execute_rescore(session, settings, profile_id, scorer=scorer)
+            print(
+                f"profile {profile_id}: run {run.id} {run.status}, "
+                f"{run.bills_scored} scored, {run.bills_unscored} unscored, "
+                f"{run.billed_units} billed units"
+                + (f" ({run.error_message})" if run.error_message else "")
+            )
+            failed += run.status != "success"
+    return 1 if failed else 0
 
 
 def cmd_download_model(settings: Settings, args: argparse.Namespace) -> int:
@@ -120,11 +131,22 @@ def cmd_download_model(settings: Settings, args: argparse.Namespace) -> int:
 
 def cmd_send_digest(settings: Settings, args: argparse.Namespace) -> int:
     from lexwatch.db import get_engine, make_sessionmaker, session_scope
-    from lexwatch.notify.digest import send_digests
+    from lexwatch.notify.digest import DigestError, send_digests
 
     factory = make_sessionmaker(get_engine(settings.database_url))
     with session_scope(factory) as session:
-        sent = send_digests(session, dry_run=args.dry_run)
+        try:
+            sent = send_digests(session, dry_run=args.dry_run, settings=settings)
+        except DigestError as exc:
+            report = exc.report
+            print(
+                f"send-digest: {report.sent} sent, {len(report.failed)} failed, "
+                f"{report.skipped} skipped (failed profiles: "
+                + ", ".join(str(pid) for pid in sorted(report.failed))
+                + ")",
+                file=sys.stderr,
+            )
+            return 1
     log.info("send-digest.done", extra={"sent": sent, "dry_run": args.dry_run})
     return 0
 
@@ -148,8 +170,25 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("run-job", help="run ingestion + scoring + digests once, now")
     p.set_defaults(func=cmd_run_job)
 
-    p = sub.add_parser("rescore", help="rescore all bills for one or all profiles")
-    p.add_argument("--profile", type=int, default=None, help="profile id (default: all)")
+    p = sub.add_parser(
+        "rescore",
+        help="rescore all bills for one or all profiles",
+        description=(
+            "Rescore now, in this process: every profile (default) or one (--profile). Each "
+            "profile gets a runs row (kind=rescore) with its billed units. Only pairs without a "
+            "current-model score are sent (new/edited rules, model switch). Exit code 1 when "
+            "a rescore failed or was partial. With --all, nothing is scored here: every "
+            "profile is queued (rescore_status=pending) for the worker, like the admin "
+            "'Rescore all' button."
+        ),
+    )
+    target = p.add_mutually_exclusive_group()
+    target.add_argument("--profile", type=int, default=None, help="profile id (default: all)")
+    target.add_argument(
+        "--all",
+        action="store_true",
+        help="queue every profile for the worker instead of rescoring now",
+    )
     p.set_defaults(func=cmd_rescore)
 
     p = sub.add_parser("download-model", help="download the local ONNX reranker model")

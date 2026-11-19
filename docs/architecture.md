@@ -35,7 +35,7 @@ src/lexwatch/
   models.py        SQLAlchemy 2 typed models, enum value tuples, TRACKED_BILL_FIELDS
   logging.py       JSON logs to stdout (configure_logging)
   http.py          make_client(settings) -> httpx.Client (User-Agent, timeout, proxy via env)
-  cli.py           lexwatch migrate|serve|worker|run-job|rescore|download-model|send-digest
+  cli.py           lexwatch migrate|serve|worker|run-job|rescore [--profile ID|--all]|download-model|send-digest
   i18n/            __init__.py (t, catalog, load_catalogs), fr.json, en.json (+ part files)
   sources/         base.py (BillRecord, SourceAdapter, SourceError), datapublic.py, chd.py
   ingest/          merge.py (upsert_bills, MergeStats), pipeline.py (run_ingestion, IngestResult)
@@ -43,7 +43,8 @@ src/lexwatch/
                    fake.py, factory.py (get_scorer, scorer_configured), text.py (bill_text),
                    service.py (score_pending_bills, rescore_profile, compute_matches, preview)
   notify/          digest.py (Digest, build_digest, send_digests), mailer.py (smtplib)
-  jobs/            daily.py (create_run, execute_run, run_daily_job), worker.py (tick, loop)
+  jobs/            daily.py (create_run, execute_run, run_daily_job), worker.py (tick, loop),
+                   rescore.py (execute_rescore, finish_rescore_status, mark_all_pending)
   web/
     app.py         create_app(settings): middleware, static, routers, error handlers
     templating.py  Jinja env, per-request globals, render()
@@ -280,14 +281,19 @@ runs `tick()`:
 3. **Pending rescores.** Saving a profile's rules or threshold sets
    `profile.rescore_status='pending'`. "Rescore all" sets `pending` on every profile. The
    worker claims one pending profile (`SKIP LOCKED`), sets it to `running`, calls
-   `rescore_profile`, and then sets it back to `idle`. The UI shows "in progress" while the
+   `rescore_profile` inside a `runs(kind='rescore', requested_by NULL, details={"profile_id": id})`
+   row (so its billed units count in the monthly cost), and then sets it back to `idle` with a
+   compare-and-set (`WHERE rescore_status='running'`): a profile saved again meanwhile stays
+   `pending` and is rescored once more. A failed rescore is recorded in its run and not retried
+   by the worker; its unscored bills and pairs are picked up by the next daily run. The UI shows "in progress" while the
    status is `pending` or `running` (htmx polling on the Rules page).
 4. **Model change.** When `FOUNDRY_MODEL` changes, rule scores whose `model` differs from
    `scorer.model_name` are stale. The operator runs `lexwatch rescore`, or uses "Rescore all".
 
 Run status lifecycle: `queued -> running -> success | partial | failed`. Per-source and per-step
 detail goes in `runs.details`, for example
-`{"sources": {"chd": {"status": "failed", "error": "..."}}, "digests_sent": 2, "billing": {"unit": "input_tokens"}}`.
+`{"sources": {"chd": {"status": "failed", "error": "..."}}, "digests_sent": 2, "digests_failed": 0, "digests_skipped": 5, "billing": {"unit": "input_tokens"}}`.
+A failed digest makes the digest step fail (run `partial`); the counts are kept.
 The admin page reads `status`, `error_message` and `details`. The monthly cost is
 `sum(billed_units)` over `runs.started_at` in the current month.
 
