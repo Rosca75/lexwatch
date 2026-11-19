@@ -165,11 +165,6 @@ def test_wrong_audience_rejected(db, provider, aud):
         _rejected(db, client, provider.login(client, {"sub": "qa-aud"}), "qa-aud")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: an ID token whose aud is present but empty ('' or []) is accepted; Authlib's "
-    "validate_aud skips falsy values and the app adds no own check that aud contains client_id",
-)
 @pytest.mark.parametrize("aud", ["", []])
 def test_empty_audience_rejected(db, provider, aud):
     provider.id_token_overrides = {"aud": aud}

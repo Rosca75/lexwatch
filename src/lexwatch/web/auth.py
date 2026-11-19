@@ -140,6 +140,15 @@ def claim_values(claims: Mapping[str, Any], path: str) -> list[str] | None:
     return [str(node)]
 
 
+def audience_ok(aud: Any, client_id: str) -> bool:
+    """``aud`` (string or list) must contain ``client_id``."""
+    if isinstance(aud, str):
+        return bool(client_id) and aud == client_id
+    if isinstance(aud, list):
+        return bool(client_id) and client_id in aud
+    return False
+
+
 def admin_values(settings: Settings) -> set[str]:
     return {v.strip().casefold() for v in settings.oidc_admin_value.split(",") if v.strip()}
 
@@ -275,6 +284,10 @@ async def auth_callback(
     claims = dict(token.get("userinfo") or {})
     if not claims.get("sub"):
         log.warning("auth.callback_no_id_token")
+        return auth_error(request, "auth.error.failed", 400)
+    if not audience_ok(claims.get("aud"), settings.oidc_client_id):
+        # Authlib skips the audience check when ``aud`` is empty; require our client id.
+        log.warning("auth.callback_bad_audience")
         return auth_error(request, "auth.error.failed", 400)
 
     values = await resolve_role_values(client, token, claims, settings)
