@@ -1,0 +1,10 @@
+{
+  "auth.signin": "Se connecter",
+  "auth.retry": "Réessayer la connexion",
+  "auth.logged_out.title": "Vous êtes déconnecté",
+  "auth.error.title": "Connexion impossible",
+  "auth.error.not_configured": "La connexion n'est pas configurée. Contactez l'administrateur.",
+  "auth.error.provider": "Le service de connexion est injoignable pour le moment. Réessayez dans quelques minutes.",
+  "auth.error.failed": "La connexion n'a pas abouti. Réessayez.",
+  "auth.error.denied": "La connexion a été refusée ou annulée."
+}

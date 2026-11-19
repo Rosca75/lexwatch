@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}{{ t('auth.logged_out.title') }} – {{ t('app.name') }}{% endblock %}
+{% block content %}
+<h1>{{ t('auth.logged_out.title') }}</h1>
+<p><a href="/login">{{ t('auth.signin') }}</a></p>
+{% endblock %}
