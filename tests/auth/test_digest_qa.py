@@ -163,12 +163,6 @@ def test_second_run_same_day_sends_no_duplicate(db):
     assert profile.last_digest_at == NOW
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a second run on the same day (e.g. admin 'Run now', which also sends digests) "
-    "sends a second email to a profile that already got one that day; spec 6.5 says one email "
-    "per profile per day",
-)
 def test_second_run_same_day_with_new_changes_still_one_email_per_day(db):
     owner = mk_user(db, "qa-d5")
     profile = mk_profile(db, owner, "P", "a@x.lu")
@@ -320,11 +314,6 @@ def test_header_injection_in_subject_is_neutralized(db, name):
         assert "<b>body</b>" not in parts(msg).get("text/plain", "").split("\n")[0]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a CR/LF in a profile name makes EmailMessage raise ValueError outside the "
-    "per-profile try block, so send_digests_report crashes and later profiles get no digest",
-)
 @pytest.mark.parametrize("name", ["P\r\nBcc: evil@x.lu", "P\nX-Injected: 1"])
 def test_crlf_in_profile_name_does_not_stop_other_profiles(db, name):
     evil, good = _subject_injection_profiles(db, name)

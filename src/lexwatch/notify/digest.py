@@ -11,7 +11,9 @@ of a profile when its match is ``matched`` and, within the window ``(since, now]
 (``last_digest_at IS NULL``) the window is the last 24 hours and only bill changes count, not
 match computations: otherwise the first digest after creating a profile would list every bill
 it matches (they are all in the app already). ``last_digest_at`` is set to ``now`` only after a
-successful send, so nothing is lost when a send fails or no digest was due.
+successful send, so nothing is lost when a send fails or no digest was due. A profile gets at
+most one digest per calendar day in ``APP_TIMEZONE``: a second run on the same day (e.g. "Run
+now") skips it, and its later changes go out the next day.
 
 Rendered from ``web/templates/email/digest.html`` and ``digest.txt`` in the profile owner's
 language, with absolute links built from ``settings.base_url``. Recipients come from
@@ -27,6 +29,7 @@ from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 from sqlalchemy import and_, or_, select
@@ -49,6 +52,7 @@ PROFILE_PATH = "/?profile={id}"
 _LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 _EMAIL_RE = re.compile(rf"^[^@\s<>(),;:\"\[\]]+@{_LABEL}(?:\.{_LABEL})+$")
 _SPLIT_RE = re.compile(r"[,;\n\r]+")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 
 
 @dataclass(slots=True)
@@ -133,6 +137,26 @@ def status_label(status: str | None, lang: str) -> str:
     return status if label == key else label
 
 
+def clean_header(value: str) -> str:
+    """One-line header value: control characters and runs of whitespace become one space."""
+    return " ".join(_CONTROL_RE.sub(" ", value).split())
+
+
+def already_sent_today(profile: Profile, now: datetime, settings: Settings) -> bool:
+    """At most one digest per profile per calendar day in ``APP_TIMEZONE``.
+
+    Changes after today's digest go out in the next day's digest (the window starts at
+    ``last_digest_at``).
+    """
+    if profile.last_digest_at is None:
+        return False
+    try:
+        tz = ZoneInfo(settings.timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        tz = UTC
+    return profile.last_digest_at.astimezone(tz).date() == now.astimezone(tz).date()
+
+
 def window_start(since: datetime | None, now: datetime) -> datetime:
     return since if since is not None else now - FIRST_DIGEST_WINDOW
 
@@ -187,7 +211,7 @@ def build_digest(
         }
         for bill, match in rows
     ]
-    subject = tr("email.digest.subject", profile=profile.name, count=len(bills))
+    subject = clean_header(tr("email.digest.subject", profile=profile.name, count=len(bills)))
     context = {
         "lang": lang,
         "t": tr,
@@ -250,7 +274,7 @@ def send_digests_report(
                 "digest.invalid_recipients",
                 extra={"profile_id": profile.id, "count": len(invalid)},
             )
-        if not recipients:
+        if not recipients or already_sent_today(profile, now, settings):
             report.skipped += 1
             continue
         try:
@@ -274,12 +298,12 @@ def send_digests_report(
             echo(_dry_run_text(digest))
             report.sent += 1
             continue
-        message = mailer.build_message(
-            settings, digest.recipients, digest.subject, digest.html, digest.text
-        )
         try:
+            message = mailer.build_message(
+                settings, digest.recipients, digest.subject, digest.html, digest.text
+            )
             mailer.send_message(settings, message)
-        except mailer.MailerError as exc:
+        except (mailer.MailerError, ValueError) as exc:
             log.error("digest.send_failed", extra={"profile_id": profile.id, "error": str(exc)})
             report.failed[profile.id] = str(exc)
             continue
