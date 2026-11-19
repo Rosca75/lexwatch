@@ -114,12 +114,13 @@ def test_failing_source_is_isolated_and_keeps_data(db, dp):
     result = run_ingestion(db, None, adapters(), dp.client())
     assert result.failed_sources == ["datapublic-121"]
     info = result.sources["datapublic-121"]
-    assert info["status"] == "failed" and "HTTP 500" in info["error"]
+    assert info["status"] == "failed"
+    assert "data.public.lu unreachable: 500 Internal Server Error" in info["error"]
     assert result.sources["datapublic-112"]["status"] == "ok"
     assert result.sources["chd"]["status"] == "unchanged"
     assert db.scalar(select(func.count()).select_from(Bill)) == count
     state = db.get(SourceState, "datapublic-121")
-    assert state.status == "failed" and "HTTP 500" in state.error
+    assert state.status == "failed" and "500 Internal Server Error" in state.error
     assert state.checksum == state_before  # failure keeps the last good file identity
 
 
