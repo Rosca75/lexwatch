@@ -136,3 +136,56 @@ Format: date — decision. *Reason.* Alternatives considered.
   bound to the host loopback; the end-to-end run used a compose override with a CA build secret, a mounted CA bundle
   and a small TCP relay so containers could reach the proxy. None of this is in the repository; the README
   documents the pattern for client proxies.
+- **2026-11-19 — Newest first means bill number descending.** Numbers are assigned at filing and the vote-only
+  records (bills after dossier 8520) have no filing date, so sorting by filing date put the newest bills last.
+- **2026-11-19 — Bills without text are not scored.** Two vote-only bills have no label at all; scoring empty text
+  produced noise matches on every profile. They stay `pending`, are skipped by scoring and matching, and are shown as
+  "Projet de loi n° 8627" until a title arrives.
+- **2026-11-19 — First ingestion does not flood the digest.** A run that ingests into an empty table is flagged
+  `bootstrap`; changes and matches inside a bootstrap window never count as "new". A profile's first digest only
+  covers changes after the profile was created.
+- **2026-11-19 — Scoring commits after each batch** and records `details.progress`, so a restart keeps finished work
+  and the admin page shows progress. A pair is not re-sent when its score is newer than the bill's last change.
+- **2026-11-19 — Local scorer tuning.** Measured on 200 real titles × 3 rules on 4 CPUs: length-sorted batching
+  (max length 512, batch 8) is 2.2× faster (13.2 pairs/s vs 6.2) with negligible score change; max length 256 was
+  faster still but changed scores by up to 0.81 on long titles, so it was rejected. `LOCAL_THREADS` can cap threads.
+- **2026-11-19 — `tokenizers<0.23` in the `local` extra.** tokenizers 0.23 pulls huggingface-hub 2.x, which installs
+  `httpx2`; Authlib then switches to httpx2 and ignores the httpx client settings used for OIDC. Revisit when Authlib
+  or lexwatch moves to httpx2.
+
+## Calibration and Definition of Done checks
+
+- **2026-11-19 — DoD 2 used the local scorer, not Foundry.** No Foundry credentials were available during the build.
+  The daily job ran in Docker Compose against the live data.public.lu sources and scored with the optional local
+  scorer (`bge-reranker-v2-m3` int8 ONNX, `SCORER=local`). Final run: ingestion of 4,013 bills in 11 s, 12,033
+  (rule, bill) pairs scored in about 31 min on 4 CPUs (0.15 s per pair; the run was deliberately interrupted once
+  and resumed). The run row records billed units 0 for the local scorer. The Foundry client is covered by recorded
+  responses; `tests/scoring/test_foundry_live.py` must be run once with real credentials at deployment, and its
+  printed billing line used to confirm costs.
+- **2026-11-19 — Cost with Foundry (estimate, not measured).** Using Azure list prices (Nov 2026): Rerank v5 Fast
+  $0.02 / 1M input tokens, v5 Pro $0.05, v4 $2.00–2.50 / 1,000 search units. About 250 new bills a year × ~120 rules
+  is under $1 a year on v5; a full rescore of ~4,000 bills × 120 rules is under $5 on v5 Fast and about $10–14 on v4.
+  Real billed units appear per run on the admin page.
+- **2026-11-19 — Default thresholds.**
+  - *Local scorer: 0.03.* On the full dataset (4,011 scored bills), non-matching profile scores had p99 0.008–0.028
+    across three test profiles; 0.05 missed clearly relevant bills (the plain average across three rules dilutes a
+    bill that is strong on one rule); in the 0.02–0.05 band about 60% were relevant. Match counts for the AML profile:
+    0.02 → 111, 0.03 → 101, 0.05 → 82, 0.10 → 74.
+  - *Foundry Rerank v5: 0.45 (fast) / 0.5 (pro); v4: 0.5.* Cohere's own guidance for calibrated v5 scores; not
+    calibrated on our data because no Foundry access was available. v4 scores are not calibrated — re-check the
+    threshold after switching (see `docs/operations.md`).
+  - Each profile can override the default; `DEFAULT_THRESHOLD` overrides it globally.
+- **2026-11-19 — DoD 3 example profile.** "AML and financial regulation", three rules:
+  1. "Lutte contre le blanchiment de capitaux et le financement du terrorisme"
+  2. "Surveillance du secteur financier et des banques"
+  3. "Fonds d'investissement et gestionnaires d'actifs"
+
+  With the local scorer at the default 0.03, 101 of 4,011 bills match. Top 15 (profile score · bill): 0.70 6471
+  AIFM law · 0.64 7723 financial-sector law amendment · 0.60 7638 CRD V/BRRD · 0.57 6164 e-money · 0.50 5627 MiFID ·
+  0.49 8387 ELTIF · 0.47 6015 payment services · 0.44 7512 central bank-account register · 0.44 6163 strengthening
+  AML · 0.43 7164 benchmarks regulation · 0.42 6660 CRD IV · 0.40 5165 AML law · 0.39 5811 3rd AML directive · 0.39
+  8671 "Direction contrôle financier" · 0.36 7128 AML/CFT obligations. 14 of 15 are clearly relevant; 8671 (State
+  financial control) is a false positive caused by its short vote-only title. Near the threshold, hits are mostly
+  relevant (financial-sector amendments, covered bonds, deposit guarantee) with a few weak ones (AI Act, merger
+  control); misses just below include the financial intelligence unit (0.028) and two Council of Europe conventions —
+  rules that name these topics explicitly would catch them. Conclusion: sensible.
