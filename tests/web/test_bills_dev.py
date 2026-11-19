@@ -106,7 +106,8 @@ def test_user_cannot_select_foreign_profile(user_client, db, data):
 
 def test_new_or_changed_rows_are_bold(client, db, data):
     admin = data["admin"]
-    admin.previous_visit_at = datetime(2025, 2, 1, tzinfo=UTC)
+    # Login shifts last_visit_at into previous_visit_at; set both so either order works.
+    admin.previous_visit_at = admin.last_visit_at = datetime(2025, 2, 1, tzinfo=UTC)
     data["bills"][2].last_changed_at = datetime(2025, 6, 2, tzinfo=UTC)
     db.flush()
     html = client.get(f"/?profile={data['aml'].id}").text
@@ -182,3 +183,12 @@ def test_bill_detail_shows_extra_when_present(client, db):
     assert "8700_Dossier_Complet.pdf" in html and "Dossier complet (PDF)" in html
     assert 'href="https://wdocs-pub.chd.lu/x.pdf"' in html and "2025-01-15" in html
     assert "javascript:" not in html
+
+
+def test_digest_links_work(user_client, db):
+    """The digest links to /?profile={id} and /bills/{number} (BASE_URL-relative)."""
+    mine = make_profile(db, dev_user(db, "user"), "Mine", ("route",))
+    make_match(db, mine, make_bill(db, "8801", title="Code de la route"), 0.9)
+    page = user_client.get(f"/?profile={mine.id}")
+    assert page.status_code == 200 and _rows(page.text) == ["8801"]
+    assert user_client.get("/bills/8801").status_code == 200

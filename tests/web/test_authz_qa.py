@@ -256,7 +256,8 @@ def test_user_rescore_all_does_not_touch_profiles(user_client, db, user_a, profi
 def test_anonymous_is_redirected_to_login(anon_client, path):
     response = anon_client.get(path, follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"].endswith("/login")
+    # The login redirect may carry ?next= (auth stream keeps the requested path).
+    assert response.headers["location"].split("?")[0].endswith("/login")
 
 
 def test_anonymous_htmx_gets_hx_redirect(anon_client):
