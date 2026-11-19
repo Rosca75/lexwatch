@@ -2,6 +2,7 @@
 name = "lexwatch"
 version = "0.1.0"
 description = "Tracks Luxembourg bills filed with the Chambre des Deputes and scores them against user-defined rules."
+readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [

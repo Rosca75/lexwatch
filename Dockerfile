@@ -24,7 +24,7 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     && if [ "$INSTALL_LOCAL_SCORER" = "1" ]; then EXTRA="--extra local"; else EXTRA=""; fi \
     && uv sync --frozen --no-dev --no-install-project $EXTRA
 
-COPY alembic.ini docker-entrypoint.sh ./
+COPY alembic.ini docker-entrypoint.sh README.md ./
 COPY migrations ./migrations
 COPY src ./src
 RUN --mount=type=secret,id=extra_ca,required=false \
