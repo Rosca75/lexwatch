@@ -1,0 +1,11 @@
+{
+  "email.digest.subject": "lexwatch : {profile} – {count} projet(s) nouveau(x) ou modifié(s)",
+  "email.digest.intro": "Projets de loi nouveaux ou modifiés pour le profil « {profile} » : {count}.",
+  "email.digest.col.number": "N°",
+  "email.digest.col.title": "Intitulé",
+  "email.digest.col.status": "Statut",
+  "email.digest.col.score": "Score",
+  "email.digest.profile_link": "Voir tous les projets du profil « {profile} »",
+  "email.digest.reason": "Vous recevez ce message parce que votre adresse figure parmi les destinataires du profil « {profile} ».",
+  "email.source": "Source : Chambre des Députés du Grand-Duché de Luxembourg"
+}

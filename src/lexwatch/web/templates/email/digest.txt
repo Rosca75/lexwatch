@@ -1,1 +1,19 @@
-{# Stream 4: plain-text digest. Same context as digest.html. #}
+{#- Stream 4: plain-text digest. Same context as digest.html. -#}
+{{ t('email.digest.intro', count=count, profile=profile_name) }}
+
+{% for bill in bills %}
+{{ bill.number }}  {{ bill.title }}
+{% if bill.status %}
+    {{ t('email.digest.col.status') }}: {{ bill.status }} | {{ t('email.digest.col.score') }}: {{ bill.score }}
+{% else %}
+    {{ t('email.digest.col.score') }}: {{ bill.score }}
+{% endif %}
+    {{ bill.url }}
+
+{% endfor %}
+{{ t('email.digest.profile_link', profile=profile_name) }}:
+{{ profile_url }}
+
+-- 
+{{ t('email.digest.reason', profile=profile_name) }}
+{{ t('email.source') }} ({{ source_url }})
