@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from lexwatch import cli
-from lexwatch.logging import DropClientAddress, configure_logging
+from lexwatch.logging import configure_logging
 
 
 def test_access_line_has_method_path_status_and_user_id(client, caplog):
@@ -27,21 +27,11 @@ def test_health_and_static_are_not_logged(client, caplog):
     assert not [r for r in caplog.records if r.getMessage() == "http.request"]
 
 
-def test_uvicorn_access_records_lose_the_client_address():
+def test_uvicorn_access_log_is_silenced():
     configure_logging("INFO")
     access = logging.getLogger("uvicorn.access")
-    assert any(isinstance(f, DropClientAddress) for f in access.filters)
-    record = logging.LogRecord(
-        "uvicorn.access",
-        logging.INFO,
-        __file__,
-        1,
-        '%s - "%s %s HTTP/%s" %d',
-        ("203.0.113.9:5000", "GET", "/", "1.1", 200),
-        None,
-    )
-    access.filters[0].filter(record)
-    assert "203.0.113.9" not in record.getMessage()
+    # uvicorn's protocols only write access lines when the logger has handlers.
+    assert access.hasHandlers() is False
 
 
 def test_serve_disables_uvicorn_access_log(monkeypatch, settings):
