@@ -9,10 +9,11 @@
   {% block head %}{% endblock %}
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf_token() }}"}'>
+  <a class="skip" href="#main">{{ t('nav.skip') }}</a>
   <header class="topbar">
     <a class="brand" href="/">{{ t('app.name') }}</a>
     {% if current_user %}
-    <nav aria-label="{{ t('app.name') }}">
+    <nav aria-label="{{ t('nav.main') }}">
       <a href="/"{% if request.url.path == '/' or request.url.path.startswith('/bills') %} aria-current="page"{% endif %}>{{ t('nav.bills') }}</a>
       <a href="/rules"{% if request.url.path.startswith('/rules') %} aria-current="page"{% endif %}>{{ t('nav.rules') }}</a>
       {% if current_user.is_admin %}
@@ -21,11 +22,11 @@
     </nav>
     {% endif %}
     <div class="topbar-end">
-      <form method="post" action="/lang" class="lang-switch">
+      <form method="post" action="/lang" class="lang-switch" aria-label="{{ t('nav.language') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="next" value="{{ request.url.path }}">
-        {% for code in languages if code != lang %}
-        <button type="submit" name="lang" value="{{ code }}" class="link" lang="{{ code }}">{{ t('lang.' ~ code) }}</button>
+        <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+        {% for code in languages %}
+        <button type="submit" name="lang" value="{{ code }}" class="link" lang="{{ code }}" title="{{ t('lang.' ~ code) }}"{% if code == lang %} aria-pressed="true"{% else %} aria-pressed="false"{% endif %}>{{ code | upper }}</button>
         {% endfor %}
       </form>
       {% if current_user %}
@@ -37,7 +38,7 @@
       {% endif %}
     </div>
   </header>
-  <main id="main">
+  <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
   <footer>

@@ -1,0 +1,37 @@
+{% import "_macros.html" as m with context %}
+{% if items %}
+<table class="bills" aria-describedby="bills-help">
+  <thead title="{{ t('bills.new.help') }}">
+    <tr>
+      <th scope="col">{{ t('bills.col.number') }}</th>
+      <th scope="col">{{ t('bills.col.title') }}</th>
+      <th scope="col">{{ t('bills.col.type') }}</th>
+      <th scope="col">{{ t('bills.col.status') }}</th>
+      <th scope="col" class="nowrap">{{ t('bills.col.filing_date') }}</th>
+      {% if profile %}<th scope="col" class="num">{{ t('bills.col.score') }}</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    {% set bill = item.bill %}
+    <tr{% if item.new %} class="new"{% endif %}>
+      <td class="nowrap">{{ bill.number }}</td>
+      <td><a href="/bills/{{ bill.number }}">{{ bill.title }}</a></td>
+      <td>{{ m.label('bill.type', bill.type) }}</td>
+      <td>{{ m.label('bill.status', bill.status) }}</td>
+      <td class="nowrap">{{ m.date(bill.filing_date) }}</td>
+      {% if profile %}<td class="num">{{ m.score(item.score) }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<span id="bills-help" class="visually-hidden">{{ t('bills.new.help') }}</span>
+{% else %}
+<p>{% if q %}{{ t('bills.empty.search') }}{% elif profile and not show_all %}{{ t('bills.empty.profile') }}{% else %}{{ t('bills.empty') }}{% endif %}</p>
+{% endif %}
+{% if prev_url or next_url %}
+<nav class="pager" aria-label="{{ t('bills.pager') }}">
+  {% if prev_url %}<a href="{{ prev_url }}" hx-get="{{ prev_url }}" hx-target="#results" hx-push-url="true" hx-indicator="#results">{{ t('bills.pager.prev') }}</a>{% endif %}
+  {% if next_url %}<a href="{{ next_url }}" hx-get="{{ next_url }}" hx-target="#results" hx-push-url="true" hx-indicator="#results">{{ t('bills.pager.next') }}</a>{% endif %}
+</nav>
+{% endif %}

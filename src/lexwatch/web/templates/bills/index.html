@@ -2,4 +2,34 @@
 {% block title %}{{ t('bills.title') }} · {{ t('app.name') }}{% endblock %}
 {% block content %}
 <h1>{{ t('bills.title') }}</h1>
+<form method="get" action="/" class="filters" role="search"
+      hx-get="/" hx-target="#results" hx-push-url="true" hx-indicator="#results"
+      hx-trigger="submit, change, input changed delay:500ms from:#q">
+  {% if profiles %}
+  <div class="field">
+    <label for="profile">{{ t('bills.filter.profile') }}</label>
+    <select id="profile" name="profile">
+      {% for p in profiles %}
+      <option value="{{ p.id }}"{% if profile and p.id == profile.id %} selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="field grow">
+    <label for="q">{{ t('bills.filter.search') }}</label>
+    <input id="q" name="q" type="search" value="{{ q }}"
+           title="{{ t('bills.filter.search.help') }}" aria-describedby="q-help">
+    <span id="q-help" class="visually-hidden">{{ t('bills.filter.search.help') }}</span>
+  </div>
+  {% if profiles %}
+  <div class="field check">
+    <input id="all" name="all" type="checkbox" value="1"{% if show_all %} checked{% endif %}>
+    <label for="all">{{ t('bills.filter.all') }}</label>
+  </div>
+  {% endif %}
+  <button type="submit" class="primary">{{ t('bills.filter.submit') }}</button>
+</form>
+<div id="results">
+{% include "bills/_table.html" %}
+</div>
 {% endblock %}

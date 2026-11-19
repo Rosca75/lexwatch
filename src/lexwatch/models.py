@@ -64,8 +64,10 @@ def _in(column: str, values: tuple[str, ...]) -> str:
     return f"{column} IN ({quoted})"
 
 
+# Text search configuration created by migration 0003 (French stemming after unaccent).
+SEARCH_CONFIG = "lexwatch_fr"
 SEARCH_VECTOR_SQL = (
-    "to_tsvector('french'::regconfig, "
+    f"to_tsvector('{SEARCH_CONFIG}'::regconfig, "
     "number || ' ' || coalesce(title, '') || ' ' || coalesce(summary, ''))"
 )
 

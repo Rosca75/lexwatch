@@ -1,6 +1,102 @@
 {% extends "base.html" %}
-{% block title %}{{ t('bill.title', number=number) }} · {{ t('app.name') }}{% endblock %}
+{% import "_macros.html" as m with context %}
+{% set heading = t('bill.heading', type=(m.label('bill.type', bill.type) or t('bill.heading.default')), number=bill.number) %}
+{% block title %}{{ heading }} · {{ t('app.name') }}{% endblock %}
 {% block content %}
-<h1>{{ t('bill.title', number=number) }}</h1>
-<p><a href="https://www.chd.lu" rel="noopener">{{ t('footer.source') }}</a></p>
+<h1>{{ heading }}</h1>
+<p class="lead">{{ bill.title }}</p>
+
+<dl class="meta">
+  {% if bill.status %}<dt>{{ t('bills.col.status') }}</dt><dd>{{ m.label('bill.status', bill.status) }}</dd>{% endif %}
+  {% if bill.filing_date %}<dt>{{ t('bills.col.filing_date') }}</dt><dd>{{ m.date(bill.filing_date) }}</dd>{% endif %}
+  {% if bill.closing_date %}<dt>{{ t('bill.closing_date') }}</dt><dd>{{ m.date(bill.closing_date) }}</dd>{% endif %}
+  {% if bill.author %}<dt>{{ t('bill.author') }}</dt><dd>{{ bill.author }}</dd>{% endif %}
+  {% if extra.committee %}<dt>{{ t('bill.committee') }}</dt><dd>{{ extra.committee }}</dd>{% endif %}
+  {% if extra.rapporteur %}<dt>{{ t('bill.rapporteur') }}</dt><dd>{{ extra.rapporteur }}</dd>{% endif %}
+  <dt>{{ t('bill.dossier') }}</dt>
+  <dd>
+    <a href="{{ dossier_url }}" rel="noopener">{{ t('bill.link.dossier') }}</a>
+    {% if extra.pdf_url %} · <a href="{{ extra.pdf_url }}" rel="noopener">{{ t('bill.link.full_pdf') }}</a>{% endif %}
+  </dd>
+  <dt>{{ t('bill.source') }}</dt>
+  <dd><a href="https://www.chd.lu" rel="noopener">{{ t('bill.source.chd') }}</a></dd>
+</dl>
+
+{% if bill.summary %}
+<h2>{{ t('bill.summary') }}</h2>
+<p class="prose">{{ bill.summary }}</p>
+{% endif %}
+
+{% if extra.documents %}
+<h2>{{ t('bill.documents') }}</h2>
+<table class="narrow">
+  <tbody>
+    {% for doc in extra.documents %}
+    <tr>
+      <td class="nowrap">{{ doc.date }}</td>
+      <td><a href="{{ doc.url }}" rel="noopener">{{ doc.label }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if scores %}
+<h2>{{ t('bill.scores') }}</h2>
+<table class="narrow">
+  <thead>
+    <tr>
+      <th scope="col">{{ t('bill.scores.profile') }}</th>
+      <th scope="col" class="num">{{ t('bills.col.score') }}</th>
+      <th scope="col">{{ t('bill.scores.match') }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in scores %}
+    <tr>
+      <td>{{ row.profile.name }}</td>
+      <td class="num">
+        {% if row.match %}
+        <span tabindex="0" class="hint" title="{{ row.lines | join('\n') }}" aria-describedby="rules-{{ row.profile.id }}">{{ m.score(row.match.profile_score) }}</span>
+        <ul id="rules-{{ row.profile.id }}" class="visually-hidden">
+          {% for line in row.lines %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+        {% else %}–{% endif %}
+      </td>
+      <td>{% if row.match %}{{ t('bill.scores.yes') if row.match.matched else t('bill.scores.no') }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if history %}
+<h2>{{ t('bill.history') }}</h2>
+<table>
+  <thead>
+    <tr>
+      <th scope="col" class="nowrap">{{ t('bill.history.date') }}</th>
+      <th scope="col">{{ t('bill.history.field') }}</th>
+      <th scope="col">{{ t('bill.history.old') }}</th>
+      <th scope="col">{{ t('bill.history.new') }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in history %}
+    <tr>
+      <td class="nowrap">{{ e.changed_at }}</td>
+      <td>{{ m.label('bill.field', e.field) }}</td>
+      {% if e.field in ('status', 'type') %}
+      <td>{{ m.label('bill.' ~ e.field, e.old) }}</td>
+      <td>{{ m.label('bill.' ~ e.field, e.new) }}</td>
+      {% else %}
+      <td>{{ e.old }}</td>
+      <td>{{ e.new }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
 {% endblock %}

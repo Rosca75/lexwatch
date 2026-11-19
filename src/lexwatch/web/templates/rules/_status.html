@@ -1,0 +1,6 @@
+{% if profile is not defined %}{% set profile = p %}{% endif %}
+{% if profile.rescore_status in ('pending', 'running') %}
+<td id="status-{{ profile.id }}" hx-get="/rules/{{ profile.id }}/status" hx-trigger="every 3s" hx-swap="outerHTML">{{ t('rules.state.in_progress') }}</td>
+{% else %}
+<td id="status-{{ profile.id }}"></td>
+{% endif %}
