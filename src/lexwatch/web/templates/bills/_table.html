@@ -5,7 +5,7 @@
     <tr>
       <th scope="col">{{ t('bills.col.number') }}</th>
       <th scope="col">{{ t('bills.col.title') }}</th>
-      <th scope="col">{{ t('bills.col.type') }}</th>
+      <th scope="col" class="nowrap">{{ t('bills.col.type') }}</th>
       <th scope="col">{{ t('bills.col.status') }}</th>
       <th scope="col" class="nowrap">{{ t('bills.col.filing_date') }}</th>
       {% if profile %}<th scope="col" class="num">{{ t('bills.col.score') }}</th>{% endif %}
@@ -17,7 +17,7 @@
     <tr{% if item.new %} class="new"{% endif %}>
       <td class="nowrap">{{ bill.number }}</td>
       <td><a href="/bills/{{ bill.number }}">{{ bill.title }}</a></td>
-      <td>{{ m.label('bill.type', bill.type) }}</td>
+      <td class="nowrap">{{ m.label('bill.type.short', bill.type) }}</td>
       <td>{{ m.label('bill.status', bill.status) }}</td>
       <td class="nowrap">{{ m.date(bill.filing_date) }}</td>
       {% if profile %}<td class="num">{{ m.score(item.score) }}</td>{% endif %}

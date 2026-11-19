@@ -15,6 +15,7 @@ KEY_RE = re.compile(r"""\bt\(\s*['"]([a-z0-9_.]+)['"]""")
 # Keys built dynamically in templates: prefix -> values that must be translated.
 DYNAMIC = {
     "bill.type": ("projet", "proposition"),
+    "bill.type.short": ("projet", "proposition"),
     "bill.status": (
         "deposited",
         "in_committee",

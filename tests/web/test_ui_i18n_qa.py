@@ -459,13 +459,18 @@ def _main(root: Node) -> Node:
     return next(n for n in root.iter() if n.tag == "main")
 
 
-@pytest.mark.parametrize(
-    "screen", ["home", "rules_new", "rules_edit", "rules_delete", "rules_invalid"]
-)
+@pytest.mark.parametrize("screen", ["rules_new", "rules_edit", "rules_delete", "rules_invalid"])
 def test_content_forms_have_exactly_one_primary_button(pages_both, screen):
     for lang in ("fr", "en"):
         for form in _forms(_main(dom(pages_both[f"{lang}:{screen}"]))):
             assert len(_primary_buttons(form)) == 1, (lang, screen, form.attrs)
+
+
+def test_bills_search_button_is_secondary(pages_both):
+    """Filtering is live (htmx); the Search button is a plain fallback, not a primary action."""
+    for lang in ("fr", "en"):
+        for form in _forms(_main(dom(pages_both[f"{lang}:home"]))):
+            assert _primary_buttons(form) == [], (lang, form.attrs)
 
 
 def test_admin_page_has_exactly_one_primary_button(pages_both):
@@ -621,3 +626,30 @@ def test_only_subtle_htmx_transition(css):
     transitions = re.findall(r"([^{}]+)\{[^}]*transition:", css)
     for selector in transitions:
         assert "htmx" in selector, selector
+
+
+def test_every_page_title_uses_the_same_separator():
+    templates = Path(__file__).resolve().parents[2] / "src/lexwatch/web/templates"
+    for path in templates.rglob("*.html"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "{% block title %}" in line and "t('app.name')" in line and "{% endblock" in line:
+                inner = line.split("{% block title %}", 1)[1]
+                if inner.startswith("{{ t('app.name') }}"):
+                    continue
+                assert " · {{ t('app.name') }}" in inner, (path.name, line)
+
+
+def test_hints_have_a_css_tooltip_for_keyboard_focus(pages_both):
+    css = (Path(__file__).resolve().parents[2] / "src/lexwatch/web/static/style.css").read_text(
+        encoding="utf-8"
+    )
+    assert ".hint[data-tip]:focus::after" in css and ".hint[data-tip]:hover::after" in css
+    found = 0
+    for name, html in pages_both.items():
+        for node in dom(html).iter():
+            if "hint" in node.classes():
+                found += 1
+                attrs = node.attrs
+                assert attrs.get("data-tip") and attrs.get("title") == attrs.get("data-tip"), name
+                assert attrs.get("tabindex") == "0" and attrs.get("aria-describedby"), name
+    assert found

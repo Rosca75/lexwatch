@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 
 import pytest
@@ -190,11 +191,15 @@ def test_rescore_state_cell_polls_while_pending(client, db):
     profile.rescore_status = "pending"
     db.flush()
     html = client.get("/rules").text
-    assert f'hx-get="/rules/{profile.id}/status"' in html and "En cours" in html
+    assert f'hx-get="/rules/{profile.id}/status"' in html and "réévaluation en cours" in html
+    # Shown after the profile name (no separate column); the only polled element.
+    assert re.search(r'>AML</a>\s*<span id="status-\d+" class="status" hx-get', html)
+    assert html.count("hx-trigger") == 1
+    assert '<th scope="col">Évaluation</th>' not in html
     profile.rescore_status = "idle"
     db.flush()
     cell = client.get(f"/rules/{profile.id}/status").text
-    assert "hx-get" not in cell and "En cours" not in cell
+    assert "hx-get" not in cell and "en cours" not in cell
 
 
 def test_delete_with_confirmation(client, db):

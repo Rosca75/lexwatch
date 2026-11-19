@@ -49,7 +49,7 @@ def test_home_lists_matched_bills_newest_first(client, data):
     assert response.status_code == 200
     assert _rows(response.text) == ["8300", "8100"]
     assert "0,66" in response.text  # French decimal separator
-    assert "Proposition de loi" in response.text  # translated type
+    assert '<td class="nowrap">Proposition</td>' in response.text  # translated type
     assert "En commission" in response.text  # translated status
 
 
@@ -57,8 +57,19 @@ def test_home_in_english(client, data):
     client.post("/lang", data={"lang": "en", "csrf_token": csrf_token(client)})
     response = client.get("/")
     assert '<html lang="en">' in response.text
-    assert "Private member’s bill" in response.text
+    assert '<td class="nowrap">Member’s bill</td>' in response.text
     assert "0.66" in response.text
+
+
+def test_home_type_labels_are_short_and_pager_has_no_arrows(client, db, data):
+    for i in range(60):
+        make_bill(db, f"9{i:03d}", title=f"Projet {i}")
+    html = client.get("/?all=1").text
+    assert '<td class="nowrap">Proposition</td>' in html
+    assert '<td class="nowrap">Projet</td>' in html
+    assert "Suivants" in html and "→" not in html and "←" not in html
+    form = html.split('role="search"', 1)[1].split("</form>", 1)[0]
+    assert 'class="primary"' not in form
 
 
 def test_unknown_status_falls_back_to_raw_value(client, db, data):
