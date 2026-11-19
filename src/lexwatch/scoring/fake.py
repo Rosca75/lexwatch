@@ -6,6 +6,8 @@ import re
 import unicodedata
 
 _WORD = re.compile(r"\w{3,}")
+# Keyword overlap is a fraction of the rule's words; 0.3 matches roughly a third of them.
+FAKE_DEFAULT_THRESHOLD = 0.3
 
 
 def _tokens(text: str) -> set[str]:
@@ -19,9 +21,13 @@ class FakeScorer:
 
     model_name = "fake"
 
-    def __init__(self, max_documents: int = 1000) -> None:
+    def __init__(
+        self, max_documents: int = 1000, default_threshold: float = FAKE_DEFAULT_THRESHOLD
+    ) -> None:
         self.max_documents = max_documents
+        self.default_threshold = default_threshold
         self.billed_units = 0
+        self.billing_unit: str | None = None
         self.calls: list[tuple[str, int]] = []  # (rule_text, n_documents), for assertions
 
     def score_many(self, rule_text: str, bill_texts: list[str]) -> list[float]:
