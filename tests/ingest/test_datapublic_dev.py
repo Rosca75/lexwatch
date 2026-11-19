@@ -186,15 +186,17 @@ def test_121_fetch_and_parse_sample(dp):
     assert bill.dossier_url == "https://www.chd.lu/fr/dossier/7389"
     assert bill.summary is None
     extra = bill.extra
-    assert extra["full_dossier_pdf"].endswith("/7389_Dossier_Complet.pdf")
+    assert extra["dossier_pdf_url"].endswith("/7389_Dossier_Complet.pdf")
     assert extra["committee"] == ["AEECA"]
     assert extra["committee_url"] == "https://www.chd.lu/fr/commission/681"
     assert extra["committee_name"].startswith("C. Affaires étrangères")
     assert extra["author_url"] == "https://www.chd.lu/fr/deputy/49"
     assert extra["dates"]["Publication"] == "2019-10-28"
-    steps = {d["step"]: d for d in extra["documents"]}
+    assert all(set(d) == {"label", "date", "url"} for d in extra["documents"])
+    steps = {d["label"]: d for d in extra["documents"]}
     assert steps["Dépôt"]["url"].startswith("https://wdocs-pub.chd.lu/docs/exped/")
-    assert steps["Vote1"]["date"] == "2019-10-10"
+    assert steps["Premier vote"]["date"] == "2019-10-10"
+    assert extra["dates"]["Vote1"] == "2019-10-10"
 
     # every kept row is a PL/PPL; others are counted as excluded
     assert {r.extra["raw_type"] for r in records.values()} <= {"PL", "PPL"}
@@ -243,7 +245,7 @@ def test_121_multiple_authors_joined():
     assert first.title == "Proposition de loi relative au test"
     assert first.status == "rejected" and first.closing_date == date(2023, 5, 6)
     assert first.dossier_url == "https://www.chd.lu/fr/dossier/8001"  # fallback pattern
-    assert first.extra["full_dossier_pdf"].endswith("/8001_Dossier_Complet.pdf")
+    assert first.extra["dossier_pdf_url"].endswith("/8001_Dossier_Complet.pdf")
     assert records[1].title == "Projet de loi déjà préfixé"
     assert records[1].status == "other" and records[1].extra["raw_status"] == "NEW"
     assert stats["excluded_types"] == {"PRGD": 1}

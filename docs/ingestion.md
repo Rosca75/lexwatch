@@ -110,10 +110,11 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
 - `extra`:
   - `committee`, `committee_name`, `committee_url`
   - `rapporteur`, `rapporteur_url`, `author_url`
-  - `full_dossier_pdf` (the `co_co` hyperlink, or the pattern when `co_co == "X"`)
+  - `dossier_pdf_url` (the `co_co` hyperlink, or the pattern when `co_co == "X"`)
   - `eu_transposition`
   - `dates` (every procedure-step date)
-  - `documents` (`step`, `date` and `url` of each step cell that has a hyperlink)
+  - `documents`: list of `{label, date, url}`, one per step cell that has a hyperlink
+    (label in French, e.g. "Premier avis du Conseil d'État"; date ISO or null)
   - `raw_status`, `raw_type`
 - `source_updated_at` = resource `last_modified`.
 
@@ -171,6 +172,27 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
   those are the scored text. Status, date, author and link changes do not trigger a rescore.
 - `bills.source` = the adapter that last changed the bill.
 
+## `bills.extra` (JSONB, migration 0002)
+
+Adapter `extra` dicts are persisted in `bills.extra` as a shallow merge: a key is set when the
+bill does not have it yet or when the record wins (same precedence as the fields); keys are
+never dropped. It is not a tracked field: no `bill_events`, no rescore, and an extra-only change
+does not move `last_changed_at`.
+
+Stable keys (the web stream may rely on them):
+
+| Key | Type | From | Meaning |
+|---|---|---|---|
+| `raw_status` | str | 112, 121, chd | upstream status code of the winning source (chd: `"<vote_type>: Oui|Non"`) |
+| `committee` | list[str] | 121 | committee abbreviations, e.g. `["FI"]` |
+| `rapporteur` | list[str] | 121 | rapporteur short names |
+| `dossier_pdf_url` | str | 121 | consolidated full-dossier PDF on wdocs-pub.chd.lu |
+| `documents` | list[{label, date, url}] | 121 | procedure documents (PDF links), in procedure order |
+
+Other keys are informative and may change: `raw_type`, `documents_list` (112),
+`committee_name`, `committee_url`, `rapporteur_url`, `author_url`, `dates`,
+`eu_transposition` (121), `vote_name`, `vote_type`, `vote_date`, `votes` (chd).
+
 ## Failures
 
 - An adapter raises `SourceError` for HTTP errors, a missing dataset or resource, a changed
@@ -193,9 +215,6 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
 
 ## Known limitations
 
-- `BillRecord.extra` is not stored, because the `bills` table has no column for it.
-  Committee, rapporteur, document links and raw codes are therefore not yet available to the
-  UI. Proposal: a `bills.extra JSONB` column (architect).
 - Bills adopted at first vote since April 2025 stay `adopted` until 112/121 are refreshed:
   publication in the Journal officiel is not visible in the open data. Bills filed after
   8520 appear only once they are voted on.

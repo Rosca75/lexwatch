@@ -128,6 +128,9 @@ class Bill(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Source extras (ingestion, migration 0002): raw_status, committee, rapporteur,
+    # dossier_pdf_url, documents [{label, date, url}], ... See docs/ingestion.md.
+    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     search_vector: Mapped[Any] = mapped_column(
         TSVECTOR, Computed(SEARCH_VECTOR_SQL, persisted=True), nullable=True, deferred=True
     )

@@ -1,4 +1,4 @@
-"""source_state: last fetch per source adapter (skip unchanged downloads)
+"""source_state (last fetch per source adapter) and bills.extra (source extras)
 
 Revision ID: 0002
 Revises: 0001
@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0002"
 down_revision: str | None = "0001"
@@ -32,6 +33,17 @@ def upgrade() -> None:
         ),
     )
 
+    op.add_column(
+        "bills",
+        sa.Column(
+            "extra",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default="{}",
+        ),
+    )
+
 
 def downgrade() -> None:
+    op.drop_column("bills", "extra")
     op.drop_table("source_state")

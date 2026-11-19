@@ -52,6 +52,10 @@ def test_full_run_then_unchanged_run(db, dp):
     bill = db.get(Bill, "7389")
     assert bill.source == "datapublic-121"
     assert bill.status == "published"
+    assert bill.extra["raw_status"] == "PUB_JO"
+    assert bill.extra["dossier_pdf_url"].endswith("/7389_Dossier_Complet.pdf")
+    assert bill.extra["committee"] == ["AEECA"]
+    assert {"label", "date", "url"} == set(bill.extra["documents"][0])
     # bills only known from votes are created with their vote title
     voted = db.get(Bill, "8800")
     assert (voted.status, voted.title, voted.source) == ("adopted", "Sécurité des écoles", "chd")

@@ -124,30 +124,31 @@ STATUS_121: dict[str, str | None] = {
     ".": None,
 }
 REQUIRED_121_COLUMNS = ("Dossier", "Nature", "Relatif à", "Etat", "Dépôt")
-# Procedure-step date columns (in procedure order), kept in extra["dates"] / extra["documents"].
-DATE_COLUMNS_121 = (
-    "Dépôt",
-    "Recev?",
-    "RenvComm",
-    "1erAvisCE",
-    "DerAvisCE",
-    "1erRapp",
-    "DerRapp",
-    "RappCommPrev",
-    "RappComm",
-    "Comm1",
-    "CommLast",
-    "SeanPub1",
-    "Vote1",
-    "Vote2",
-    "DispVote",
-    "1erAmdtGvt",
-    "DerAmdtGvt",
-    "1erAmdtComm",
-    "DerAmdtComm",
-    "AvisCP",
-    "Publication",
-)
+# Procedure-step date columns (in procedure order) -> label of the linked document.
+# Dates go to extra["dates"] (keyed by column); linked cells to extra["documents"].
+DATE_COLUMNS_121: dict[str, str] = {
+    "Dépôt": "Dépôt",
+    "Recev?": "Recevabilité",
+    "RenvComm": "Renvoi en commission",
+    "1erAvisCE": "Premier avis du Conseil d'État",
+    "DerAvisCE": "Dernier avis du Conseil d'État",
+    "1erRapp": "Nomination du premier rapporteur",
+    "DerRapp": "Nomination du dernier rapporteur",
+    "RappCommPrev": "Rapport de commission (prévisionnel)",
+    "RappComm": "Rapport de commission",
+    "Comm1": "Première réunion de commission",
+    "CommLast": "Dernière réunion de commission",
+    "SeanPub1": "Première séance publique",
+    "Vote1": "Premier vote",
+    "Vote2": "Second vote",
+    "DispVote": "Dispense du second vote",
+    "1erAmdtGvt": "Premier amendement gouvernemental",
+    "DerAmdtGvt": "Dernier amendement gouvernemental",
+    "1erAmdtComm": "Premier amendement de commission",
+    "DerAmdtComm": "Dernier amendement de commission",
+    "AvisCP": "Avis de la Conférence des Présidents",
+    "Publication": "Publication au Journal officiel",
+}
 # closing_date for a 121 row, by normalized status: first non-empty column wins. 112's
 # LAW_EVACUATION_DATE equals DispVote for adopted/published bills, so DispVote comes first.
 CLOSING_COLUMNS_121: dict[str, tuple[str, ...]] = {
@@ -492,7 +493,7 @@ def parse_121_xlsx(
 
         dates: dict[str, str] = {}
         documents: list[dict[str, str]] = []
-        for col in DATE_COLUMNS_121:
+        for col, label in DATE_COLUMNS_121.items():
             if col not in columns:
                 continue
             day = _cell_date(value(col))
@@ -500,7 +501,9 @@ def parse_121_xlsx(
             if day:
                 dates[col] = day.isoformat()
             if url:
-                documents.append({"step": col, "date": day.isoformat() if day else "", "url": url})
+                documents.append(
+                    {"label": label, "date": day.isoformat() if day else None, "url": url}
+                )
         closing = None
         for col in CLOSING_COLUMNS_121.get(status or "", ()):
             if col in columns and (closing := _cell_date(value(col))):
@@ -528,7 +531,7 @@ def parse_121_xlsx(
         if not full_pdf and _cell_text(value("co_co")).upper() == "X":
             full_pdf = FULL_DOSSIER_PDF.format(number=number)
         if full_pdf:
-            extra["full_dossier_pdf"] = full_pdf
+            extra["dossier_pdf_url"] = full_pdf
         if _cell_text(value("EUR")).upper() == "OUI":
             extra["eu_transposition"] = True
 

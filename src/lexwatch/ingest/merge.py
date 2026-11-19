@@ -22,6 +22,10 @@ Owned by stream 1. Rules (see ``docs/ingestion.md`` for the rationale):
   (``score_state = 'pending'``) only for new bills and when a scored input (title or summary)
   changed; status, date, author and link changes do not need a rescore.
 - ``bills.source`` holds the adapter that last changed the bill.
+- ``bills.extra`` (JSONB) is a shallow merge of the records' ``extra`` dicts: a key is set when
+  the bill does not have it yet or when the record wins (same precedence as above); keys are
+  never dropped. It is not a tracked field: no event, no rescore, and an extra-only change
+  does not move ``last_changed_at`` nor count as a changed bill.
 """
 
 from __future__ import annotations
@@ -98,16 +102,20 @@ class _Draft:
     values: dict[str, Any]
     updated_at: datetime | None
     changed_by: dict[str, str]  # field -> source of the record that set the current value
+    extra: dict[str, Any]
     last_source: str | None = None
 
     @classmethod
     def from_bill(cls, bill: Bill | None) -> _Draft:
         if bill is None:
-            return cls(values=dict.fromkeys(MERGED_FIELDS), updated_at=None, changed_by={})
+            return cls(
+                values=dict.fromkeys(MERGED_FIELDS), updated_at=None, changed_by={}, extra={}
+            )
         return cls(
             values={f: getattr(bill, f) for f in MERGED_FIELDS},
             updated_at=bill.source_updated_at,
             changed_by={},
+            extra=dict(bill.extra or {}),
         )
 
     def apply(self, record: BillRecord) -> None:
@@ -128,6 +136,10 @@ class _Draft:
             self.values[field] = new
             self.changed_by[field] = record.source
             touched = True
+        for key, new in (record.extra or {}).items():
+            # shallow merge: a key is set when absent or when the record wins; never dropped
+            if new is not None and (wins or key not in self.extra):
+                self.extra[key] = new
         if wins and record.source_updated_at is not None:
             self.updated_at = record.source_updated_at
         if touched:
@@ -170,6 +182,7 @@ def upsert_bills(session: Session, records: Iterable[BillRecord], run: Run | Non
                     first_seen_at=now,
                     last_changed_at=now,
                     source_updated_at=draft.updated_at,
+                    extra=draft.extra,
                 )
             )
             stats.added += 1
@@ -180,6 +193,8 @@ def upsert_bills(session: Session, records: Iterable[BillRecord], run: Run | Non
         ]
         if draft.updated_at != bill.source_updated_at and draft.updated_at is not None:
             bill.source_updated_at = draft.updated_at
+        if draft.extra != (bill.extra or {}):
+            bill.extra = draft.extra  # not tracked, no event, no rescore, no last_changed_at
         if not changed_fields:
             stats.unchanged += 1
             continue

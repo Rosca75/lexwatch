@@ -233,3 +233,46 @@ def test_bulk_upsert_of_thousands(db):
     assert stats.added == 4000
     again = upsert_bills(db, records, None)
     assert again.unchanged == 4000
+
+
+def test_extra_is_shallow_merged_without_events(db):
+    upsert_bills(db, [rec(extra={"raw_status": "EnCommission", "documents_list": "Dépôt"})], None)
+    bill = db.get(Bill, "8000")
+    assert bill.extra == {"raw_status": "EnCommission", "documents_list": "Dépôt"}
+    bill.score_state = "scored"
+    stamp = bill.last_changed_at
+    db.flush()
+
+    docs = [{"label": "Dépôt", "date": "2024-01-02", "url": "https://x/1.pdf"}]
+    stats = upsert_bills(
+        db,
+        [
+            rec(
+                source="datapublic-121",
+                ts=T121,
+                extra={"raw_status": "COMM", "documents": docs, "dossier_pdf_url": "https://x"},
+            )
+        ],
+        None,
+    )
+    assert stats.unchanged == 1  # extra-only change is not a bill change
+    assert bill.extra == {
+        "raw_status": "COMM",  # newer source wins per key
+        "documents_list": "Dépôt",  # keys are never dropped
+        "documents": docs,
+        "dossier_pdf_url": "https://x",
+    }
+    assert bill.score_state == "scored"
+    assert bill.last_changed_at == stamp
+    assert events(db) == []
+
+
+def test_older_extra_only_fills_missing_keys(db):
+    upsert_bills(db, [rec(source="datapublic-121", ts=T121, extra={"raw_status": "PUB_JO"})], None)
+    upsert_bills(
+        db,
+        [rec(source="chd", ts=TVOTE_OLD, extra={"raw_status": "vote", "votes": {"Oui": 3}})],
+        None,
+    )
+    db.expire_all()
+    assert db.get(Bill, "8000").extra == {"raw_status": "PUB_JO", "votes": {"Oui": 3}}
