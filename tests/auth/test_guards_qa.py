@@ -138,11 +138,6 @@ def test_dev_auth_off_by_default():
     assert Settings().dev_auth is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: ENV is compared case-sensitively; ENV=Production/PRODUCTION is not treated as "
-    "production, so DEV_AUTH is accepted and the Secure cookie flag is not forced",
-)
 @pytest.mark.parametrize("env", ["Production", "PRODUCTION"])
 def test_dev_auth_refused_for_production_in_any_case(env):
     settings = Settings.from_env({"ENV": env, "DEV_AUTH": "true", "SECRET_KEY": "k" * 40})

@@ -117,7 +117,7 @@ class Settings:
         e = os.environ if environ is None else environ
         d = cls()
         return cls(
-            env=_str(e.get("ENV"), d.env),
+            env=_str(e.get("ENV"), d.env).lower(),
             log_level=_str(e.get("LOG_LEVEL"), d.log_level),
             base_url=_str(e.get("BASE_URL"), d.base_url),
             secret_key=_str(e.get("SECRET_KEY"), d.secret_key),
