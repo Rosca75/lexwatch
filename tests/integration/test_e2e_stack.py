@@ -120,7 +120,8 @@ def test_matched_bill_shows_rule_scores_on_hover(client: httpx.Client) -> None:
         pytest.skip("no matched bills for the default profile")
     html = client.get(f"/bills/{numbers[0]}").text
     hint = re.search(
-        r'<span tabindex="0" class="hint" title="([^"]+)" aria-describedby="([^"]+)"', html
+        r'<span tabindex="0" class="hint" (?:title|data-tip)="([^"]+)" aria-describedby="([^"]+)"',
+        html,
     )
     assert hint, "no per-rule hover on the score"
     assert f'id="{hint.group(2)}"' in html
