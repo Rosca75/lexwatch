@@ -9,12 +9,9 @@
 {%- endif -%}
 {%- endmacro %}
 
-{# Scores and thresholds: two decimals, locale decimal separator. #}
+{# Scores and thresholds: i18n.format_score (three decimals, locale decimal separator). #}
 {% macro score(value) -%}
-{%- if value is not none -%}
-{%- set s = '%.2f' | format(value) -%}
-{{ s.replace('.', ',') if lang == 'fr' else s }}
-{%- endif -%}
+{{ format_score(value) }}
 {%- endmacro %}
 
 {% macro date(value) -%}

@@ -1,7 +1,8 @@
 """Jinja2 environment and the ``render`` helper used by all routes.
 
 Template globals (per request): ``t(key, **fmt)`` bound to the request language,
-``bill_label(number, type)`` ("Projet de loi n° 8627"), ``lang``,
+``bill_label(number, type)`` ("Projet de loi n° 8627"), ``format_score(value)`` (three
+decimals, locale separator), ``lang``,
 ``csrf_token()``, ``current_user`` (``User | None``), ``settings``, ``request``.
 """
 
@@ -15,7 +16,7 @@ from fastapi import Request
 from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
 
-from lexwatch.i18n import LANGUAGES, bill_label, t
+from lexwatch.i18n import LANGUAGES, bill_label, format_score, t
 from lexwatch.web.csrf import get_csrf_token
 from lexwatch.web.deps import get_lang
 
@@ -29,6 +30,7 @@ def _context(request: Request) -> dict[str, Any]:
         "languages": LANGUAGES,
         "t": partial(t, lang=lang),
         "bill_label": partial(bill_label, lang=lang),
+        "format_score": partial(format_score, lang=lang),
         "csrf_token": partial(get_csrf_token, request),
         "current_user": getattr(request.state, "user", None),
         "settings": request.app.state.settings,

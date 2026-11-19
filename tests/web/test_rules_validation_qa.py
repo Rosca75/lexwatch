@@ -117,7 +117,7 @@ def test_invalid_threshold_on_edit_keeps_old_value(user_client, db, me):
 def test_threshold_is_shown_with_locale_decimal_separator(user_client, db, me):
     profile = make_profile(db, me, name="Sep", threshold=0.65)
     page = user_client.get(f"/rules/{profile.id}").text
-    assert 'value="0,65"' in page
+    assert 'value="0,650"' in page
 
 
 # --- name ---------------------------------------------------------------------------------
