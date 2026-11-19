@@ -57,7 +57,7 @@
       <td>{{ row.profile.name }}</td>
       <td class="num">
         {% if row.match %}
-        <span tabindex="0" class="hint" data-tip="{{ row.lines | join('\n') }}" title="{{ row.lines | join('\n') }}" aria-describedby="rules-{{ row.profile.id }}">{{ m.score(row.match.profile_score) }}</span>
+        <span tabindex="0" class="hint" data-tip="{{ row.lines | join('\n') }}" aria-describedby="rules-{{ row.profile.id }}">{{ m.score(row.match.profile_score) }}</span>
         <ul id="rules-{{ row.profile.id }}" class="visually-hidden">
           {% for line in row.lines %}<li>{{ line }}</li>{% endfor %}
         </ul>

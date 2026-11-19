@@ -650,6 +650,7 @@ def test_hints_have_a_css_tooltip_for_keyboard_focus(pages_both):
             if "hint" in node.classes():
                 found += 1
                 attrs = node.attrs
-                assert attrs.get("data-tip") and attrs.get("title") == attrs.get("data-tip"), name
+                # One tooltip only: the CSS one (no native title tooltip on top of it).
+                assert attrs.get("data-tip") and "title" not in attrs, name
                 assert attrs.get("tabindex") == "0" and attrs.get("aria-describedby"), name
     assert found
