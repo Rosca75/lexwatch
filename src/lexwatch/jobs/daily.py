@@ -69,6 +69,24 @@ def carries_bootstrap(session: Session, run: Run) -> bool:
     )
 
 
+def _record_billing(run: Run, scorer: object) -> None:
+    run.billed_units = int(getattr(scorer, "billed_units", 0) or 0)
+    billing_unit = getattr(scorer, "billing_unit", None)
+    if billing_unit:  # also when scoring raised after some billed requests
+        run.details = {**(run.details or {}), "billing": {"unit": billing_unit}}
+
+
+def mark_stopped(session: Session, run: Run) -> None:
+    """Finish ``run`` as ``failed`` because the worker is stopping; commits."""
+    from lexwatch.jobs.stopping import STOPPING_MESSAGE
+
+    run.status = "failed"
+    run.error_message = STOPPING_MESSAGE
+    run.finished_at = utcnow()
+    session.commit()
+    log.warning("job.stopped", extra={"run_id": run.id, "kind": run.kind})
+
+
 def execute_run(session: Session, run: Run, settings: Settings) -> Run:
     """Execute an existing run row: ingestion, scoring, digests; finalize status and counters.
 
@@ -78,6 +96,7 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
     A run that follows an interrupted bootstrap run carries the flag (``carries_bootstrap``).
     """
     from lexwatch.ingest.pipeline import run_ingestion
+    from lexwatch.jobs.stopping import WorkerStopping, commit_or_stop
     from lexwatch.notify.digest import send_digests_report
     from lexwatch.scoring.factory import get_scorer
     from lexwatch.scoring.service import score_pending_bills
@@ -109,8 +128,9 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
     scorer = get_scorer(settings)
     try:
         # Commits after each scoring batch: a crash keeps the scores already computed, and
-        # run.details["progress"] shows how far it is on the admin page.
-        scored = score_pending_bills(session, scorer, run, commit=session.commit)
+        # run.details["progress"] shows how far it is on the admin page. A worker stop
+        # request raises WorkerStopping after a batch is committed.
+        scored = score_pending_bills(session, scorer, run, commit=commit_or_stop(session))
         run.bills_scored, run.bills_unscored = scored.scored, scored.unscored
         if scored.error:
             errors["scoring"] = scored.error
@@ -118,14 +138,16 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
             steps_ok += 1
             run.details = {**(run.details or {}), "scoring_complete": True}
         session.commit()
+    except WorkerStopping:
+        session.rollback()
+        _record_billing(run, scorer)
+        mark_stopped(session, run)
+        raise
     except Exception as exc:
         session.rollback()
         log.exception("job.scoring_failed", extra={"run_id": run.id})
         errors["scoring"] = repr(exc)
-    run.billed_units = int(getattr(scorer, "billed_units", 0) or 0)
-    billing_unit = getattr(scorer, "billing_unit", None)
-    if billing_unit:  # also when scoring raised after some billed requests
-        run.details = {**(run.details or {}), "billing": {"unit": billing_unit}}
+    _record_billing(run, scorer)
     session.commit()
 
     if settings.digest_enabled:

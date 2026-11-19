@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import logging
 import signal
-import threading
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
@@ -79,12 +78,14 @@ def tick(session: Session, settings: Settings) -> None:
     """One polling iteration (testable)."""
     from lexwatch.jobs.daily import create_run, execute_run
     from lexwatch.jobs.rescore import execute_rescore, execute_rescore_all, finish_rescore_status
+    from lexwatch.jobs.stopping import WorkerStopping, raise_if_stopping
 
     if daily_due(session, settings):
         run = create_run(session, "daily")
         session.commit()
         execute_run(session, run, settings)
 
+    raise_if_stopping()
     run = claim_queued_run(session)
     if run is not None:
         if run.kind == "rescore":
@@ -92,6 +93,7 @@ def tick(session: Session, settings: Settings) -> None:
         else:
             execute_run(session, run, settings)
 
+    raise_if_stopping()
     profile = claim_pending_rescore(session)
     if profile is not None:
         profile_id = profile.id
@@ -99,11 +101,12 @@ def tick(session: Session, settings: Settings) -> None:
         session.commit()
         try:
             execute_rescore(session, settings, profile_id)
+        except WorkerStopping:
+            raise  # the profile stays running -> pending again at the next start
         except Exception:
             session.rollback()
             log.exception("worker.rescore_failed", extra={"profile_id": profile_id})
-        finally:
-            finish_rescore_status(session, profile_id)
+        finish_rescore_status(session, profile_id)
 
 
 INTERRUPTED = "interrupted (worker restarted)"
@@ -138,11 +141,21 @@ def recover_interrupted(session: Session) -> tuple[int, int]:
 
 def run_worker(settings: Settings) -> None:
     from lexwatch.db import get_engine, make_sessionmaker
+    from lexwatch.jobs.stopping import WorkerStopping, clear_stop, request_stop, stop_event
 
     factory = make_sessionmaker(get_engine(settings.database_url))
-    stop = threading.Event()
+    # The handler only sets a flag: a long scoring run checks it after each committed batch
+    # (jobs.stopping.commit_or_stop) and stops, so `docker compose stop` needs no SIGKILL.
+    clear_stop()
+    stop = stop_event()
+
+    def _on_signal(signum: int, _frame: object) -> None:
+        if not stop.is_set():
+            log.info("worker.stop_requested", extra={"signal": signal.Signals(signum).name})
+        request_stop()
+
     for sig in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(sig, lambda *_: stop.set())
+        signal.signal(sig, _on_signal)
     log.info("worker.started", extra={"poll_seconds": settings.worker_poll_seconds})
     try:
         with factory() as session:
@@ -160,6 +173,8 @@ def run_worker(settings: Settings) -> None:
         try:
             with factory() as session:
                 tick(session, settings)
+        except WorkerStopping:
+            break
         except Exception:
             log.exception("worker.tick_failed")
         stop.wait(settings.worker_poll_seconds)
