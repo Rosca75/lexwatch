@@ -38,6 +38,7 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    ORT_DISABLE_TELEMETRY=1 \
     PATH="/app/.venv/bin:$PATH"
 
 RUN groupadd --system --gid 10001 lexwatch \

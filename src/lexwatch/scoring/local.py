@@ -34,6 +34,7 @@ log = logging.getLogger(__name__)
 
 TOKENIZER_FILE = "tokenizer.json"
 HF_BASE_URL = "https://huggingface.co"
+ORT_TELEMETRY_ENV = "ORT_DISABLE_TELEMETRY"  # read by onnxruntime at import
 # Default profile threshold for this scorer when DEFAULT_THRESHOLD is not set. First
 # calibrated at 0.05 on the 250 most recent bills of dataset 121; an end-to-end run on all
 # 4,013 bills with 3 French profiles then showed non-matching bills up to a profile mean of
@@ -110,6 +111,11 @@ class LocalScorer:
     def _load(self) -> None:
         if self._session is not None and self._tokenizer is not None:
             return
+        # onnxruntime's telemetry writes "Failed to persist telemetry device ID" (a coloured,
+        # non-JSON line) to stderr when it cannot store a device id (read-only home in the
+        # container). Only this variable, read when the module is first imported, stops it:
+        # disable_telemetry_events() and the logger severities below do not.
+        os.environ.setdefault(ORT_TELEMETRY_ENV, "1")
         try:
             import onnxruntime
             import tokenizers
@@ -124,8 +130,8 @@ class LocalScorer:
             raise ScoringError(
                 f"local model files missing ({', '.join(missing)}); run `lexwatch download-model`"
             )
-        # Errors only: onnxruntime otherwise prints warnings (and a telemetry notice on some
-        # platforms) straight to stderr, outside the JSON logs.
+        # Errors only: onnxruntime otherwise prints warnings straight to stderr, outside the
+        # JSON logs. Set before the session is created.
         onnxruntime.set_default_logger_severity(3)
         options = onnxruntime.SessionOptions()
         options.log_severity_level = 3
