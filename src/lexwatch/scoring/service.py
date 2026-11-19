@@ -34,7 +34,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, exists, func, or_, select
+from sqlalchemy import case, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -384,6 +384,10 @@ def compute_matches(
 ) -> int:
     """Recompute ``matches`` rows for ``profile``; return the number of matched bills.
 
+    ``computed_at`` changes only when a row is inserted or its ``matched`` flips (the digest
+    reads ``computed_at > last_digest_at AND matched`` as "newly matched"); a score-only
+    change updates ``profile_score`` but keeps ``computed_at``.
+
     ``default_threshold`` (used when the profile has none) falls back to
     ``default_threshold_for(get_settings())``. When ``model`` is given only that model's scores
     count. A bill is (re)computed only when every rule of the profile has a score for it.
@@ -428,7 +432,15 @@ def compute_matches(
             set_={
                 "profile_score": ins.excluded.profile_score,
                 "matched": ins.excluded.matched,
-                "computed_at": ins.excluded.computed_at,
+                # computed_at marks "newly matched" for the digest: bump it only when the
+                # row is new (insert) or matched flips, never for a score-only change.
+                "computed_at": case(
+                    (
+                        table.c.matched.is_distinct_from(ins.excluded.matched),
+                        ins.excluded.computed_at,
+                    ),
+                    else_=table.c.computed_at,
+                ),
             },
             where=or_(
                 table.c.profile_score.is_distinct_from(ins.excluded.profile_score),

@@ -357,3 +357,39 @@ def test_preview_without_rules_or_bills(db, bills):
 def test_preview_propagates_scoring_errors(db, bills):
     with pytest.raises(ScoringError):
         preview_matches(db, StubScorer(fail_on={AML}), [AML], threshold=0.5)
+
+
+def test_computed_at_only_moves_on_new_row_or_matched_flip(db, owner, bills):
+    from datetime import UTC, datetime
+
+    profile = add_profile(db, owner, [AML, TERROR], threshold=0.6)
+    score_pending_bills(db, FakeScorer(), None)
+    old = datetime(2020, 1, 1, tzinfo=UTC)
+    db.execute(Match.__table__.update().values(computed_at=old))
+
+    def stamps():
+        db.expire_all()
+        return {
+            n: (m.computed_at, m.matched, m.profile_score)
+            for n, m in matches_of(db, profile).items()
+        }
+
+    # rescore with identical scores, then a score-only change: no computed_at bump
+    rescore_profile(db, FakeScorer(), profile.id, force=True)
+    db.execute(
+        RuleScore.__table__.update()
+        .where(RuleScore.bill_number == "8407", RuleScore.rule_id == profile.rules[1].id)
+        .values(score=0.9)
+    )
+    compute_matches(db, profile, 0.5)
+    after = stamps()
+    assert after["8407"][2] == pytest.approx(0.95)  # score updated
+    assert all(ts == old for ts, _, _ in after.values())
+
+    # threshold flip: 8408 (0.5) becomes matched -> only that row bumps
+    profile.threshold = Decimal("0.4")
+    db.flush()
+    compute_matches(db, profile, 0.5)
+    after = stamps()
+    assert after["8408"][1] is True and after["8408"][0] > old
+    assert after["8407"][0] == old and after["8410"][0] == old
