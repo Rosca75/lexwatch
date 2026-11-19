@@ -378,15 +378,29 @@ def test_entra_credential_failure_is_scoring_error():
     assert rec.requests == []
 
 
-def test_401_drops_cached_token():
-    rec = Recorder([echo_scores, httpx.Response(401, json={"message": "expired"}), echo_scores])
-    cred = FakeCredential()
-    scorer = entra_scorer(rec, cred, [0.0])
-    scorer.score_many("q", ["a"])
-    with pytest.raises(ScoringError):
+def test_entra_401_retries_once_with_fresh_token():
+    rec = Recorder([httpx.Response(401, json={"message": "expired"}), echo_scores])
+    scorer = entra_scorer(rec, FakeCredential(), [0.0])
+    assert scorer.score_many("q", ["a"]) == [0.01]
+    assert [r.headers["Authorization"] for r in rec.requests] == ["Bearer tok-1", "Bearer tok-2"]
+
+
+def test_entra_repeated_401_fails_and_next_call_gets_fresh_token():
+    unauthorized = httpx.Response(401, json={"message": "no role"})
+    rec = Recorder([unauthorized, unauthorized, echo_scores])
+    scorer = entra_scorer(rec, FakeCredential(), [0.0])
+    with pytest.raises(ScoringError, match="no role"):
         scorer.score_many("q", ["a"])
+    assert len(rec.requests) == 2
     scorer.score_many("q", ["a"])
-    assert rec.requests[-1].headers["Authorization"] == "Bearer tok-2"
+    assert rec.requests[-1].headers["Authorization"] == "Bearer tok-3"
+
+
+def test_api_key_401_is_not_retried():
+    rec = Recorder([httpx.Response(401, json={"message": "bad key"})])
+    with pytest.raises(ScoringError, match="bad key"):
+        make_scorer(rec).score_many("q", ["a"])
+    assert len(rec.requests) == 1
 
 
 def test_missing_endpoint_is_scoring_error():

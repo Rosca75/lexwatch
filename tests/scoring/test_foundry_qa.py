@@ -145,11 +145,6 @@ def test_duplicate_index_replacing_a_missing_one_is_error():
         scorer_for(up).score_many("q", ["a", "b"])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a duplicate results[].index is silently accepted (last value wins) when every "
-    "index is also present; the response is ambiguous and must raise ScoringError",
-)
 def test_duplicate_index_with_all_indices_present_is_error():
     payload = {
         "results": [
@@ -517,11 +512,6 @@ def test_entra_scope_is_configurable():
     assert cred.calls == [("https://ai.azure.com/.default",)]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a 401 with Entra ID drops the cached token but does not retry once with a "
-    "fresh token; the request fails and the bills go unscored until the next run",
-)
 def test_entra_401_refreshes_token_and_retries_once():
     clock = [0.0]
     cred = FakeCredential(clock=clock)

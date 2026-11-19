@@ -317,18 +317,28 @@ class FoundryScorer:
                 self._sleep(delay)
         raise ScoringError(f"Foundry rerank failed after {attempts} attempts: {last}")
 
-    def _post_once(self, body: dict[str, Any]) -> dict[str, Any]:
+    def _send(self, body: dict[str, Any]) -> httpx.Response:
         headers = {"Content-Type": "application/json", **self._auth_headers()}
         try:
-            response = self._http().post(self.endpoint, json=body, headers=headers)
+            return self._http().post(self.endpoint, json=body, headers=headers)
         except httpx.TimeoutException as exc:
             raise _RetryableError(f"timeout ({type(exc).__name__})") from exc
         except httpx.TransportError as exc:
             raise _RetryableError(f"connection error ({type(exc).__name__})") from exc
+
+    def _post_once(self, body: dict[str, Any]) -> dict[str, Any]:
+        response = self._send(body)
+        if response.status_code == 401 and not self.settings.foundry_api_key:
+            # Entra ID: the cached token may have been revoked or expired early. Drop it and
+            # retry once with a fresh one; a second 401 is a real auth error. (A 401 with an
+            # API key is never retried: the key will not change.)
+            self._token = None
+            log.warning("scoring.foundry.token_refresh", extra={"status": 401})
+            response = self._send(body)
+            if response.status_code == 401:
+                self._token = None
         if response.status_code in RETRYABLE_STATUS:
             raise _RetryableError(error_detail(response), _retry_after_seconds(response))
-        if response.status_code == 401:
-            self._token = None  # force a fresh Entra token on the next request
         if response.status_code >= 400:
             raise ScoringError(f"Foundry rerank rejected the request: {error_detail(response)}")
         try:
@@ -345,12 +355,16 @@ class FoundryScorer:
         if not isinstance(results, list):
             raise ScoringError("Foundry rerank response has no 'results' list")
         scores: list[float | None] = [None] * n_docs
+        seen: set[int] = set()
         for item in results:
             if not isinstance(item, dict):
                 raise ScoringError("Foundry rerank result is not an object")
             index, score = item.get("index"), item.get("relevance_score")
             if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < n_docs:
                 raise ScoringError(f"Foundry rerank returned an invalid index: {index!r}")
+            if index in seen:
+                raise ScoringError(f"Foundry rerank returned index {index} more than once")
+            seen.add(index)
             if isinstance(score, bool) or not isinstance(score, int | float):
                 raise ScoringError(f"Foundry rerank returned an invalid score for {index}")
             scores[index] = min(1.0, max(0.0, float(score)))
