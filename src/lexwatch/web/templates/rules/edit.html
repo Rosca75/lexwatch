@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set heading = profile.name if profile else t('rules.new') %}
+{% block title %}{{ heading }} · {{ t('app.name') }}{% endblock %}
+{% block content %}
+<h1>{{ heading }}</h1>
+<form method="post" action="{{ action_url }}" id="profile-form" class="stack" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {# First submit button = default for Enter in a text field: save, not "move up". #}
+  <button type="submit" name="action" value="save" class="visually-hidden" tabindex="-1" aria-hidden="true">{{ t('rules.form.save') }}</button>
+
+  <div class="field">
+    <label for="name">{{ t('rules.form.name') }}</label>
+    <input id="name" name="name" type="text" value="{{ form.name }}" maxlength="200" required
+           {% if form.errors.name %}aria-invalid="true" aria-describedby="name-error"{% endif %}
+           {% if not focus and not profile %}autofocus{% endif %}>
+    {% if form.errors.name %}<span id="name-error" class="error">{{ t(form.errors.name) }}</span>{% endif %}
+  </div>
+
+  <fieldset>
+    <legend title="{{ t('rules.form.rules.help') }}" aria-describedby="rules-help">{{ t('rules.form.rules') }}</legend>
+    <span id="rules-help" class="visually-hidden">{{ t('rules.form.rules.help') }}</span>
+    {% if form.errors.rules %}<p class="error">{{ t(form.errors.rules) }}</p>{% endif %}
+    <ol class="rules">
+      {% for rule_id, text in form.rules %}
+      {% set i = loop.index0 %}
+      <li>
+        <input type="hidden" name="rule_id" value="{{ rule_id if rule_id is not none else '' }}">
+        <textarea id="rule-{{ i }}" name="rule_text" rows="2" aria-label="{{ t('rules.form.rule', n=loop.index) }}"
+                  aria-describedby="rules-help"{% if focus == 'rule-' ~ i %} autofocus{% endif %}>{{ text }}</textarea>
+        <span class="rule-actions">
+          {% if not loop.first %}<button type="submit" name="action" value="up-{{ i }}" id="up-{{ i }}" class="link" aria-label="{{ t('rules.form.up.label', n=loop.index) }}"{% if focus == 'up-' ~ i %} autofocus{% endif %}>{{ t('rules.form.up') }}</button>{% endif %}
+          {% if not loop.last %}<button type="submit" name="action" value="down-{{ i }}" id="down-{{ i }}" class="link" aria-label="{{ t('rules.form.down.label', n=loop.index) }}"{% if focus == 'down-' ~ i %} autofocus{% endif %}>{{ t('rules.form.down') }}</button>{% endif %}
+          <button type="submit" name="action" value="remove-{{ i }}" class="link" aria-label="{{ t('rules.form.remove.label', n=loop.index) }}">{{ t('rules.form.remove') }}</button>
+        </span>
+      </li>
+      {% endfor %}
+    </ol>
+    <button type="submit" name="action" value="add" id="add-rule" class="link"{% if focus == 'add-rule' %} autofocus{% endif %}>{{ t('rules.form.add') }}</button>
+  </fieldset>
+
+  <div class="field">
+    <label for="threshold">{{ t('rules.form.threshold') }}</label>
+    <input id="threshold" name="threshold" type="text" inputmode="decimal" value="{{ form.threshold }}"
+           placeholder="{{ default_threshold }}" class="short"
+           title="{{ t('rules.form.threshold.help', default=default_threshold) }}"
+           aria-describedby="threshold-help{% if form.errors.threshold %} threshold-error{% endif %}"
+           {% if form.errors.threshold %}aria-invalid="true"{% endif %}>
+    <span id="threshold-help" class="visually-hidden">{{ t('rules.form.threshold.help', default=default_threshold) }}</span>
+    {% if form.errors.threshold %}<span id="threshold-error" class="error">{{ t(form.errors.threshold) }}</span>{% endif %}
+  </div>
+
+  <div class="field">
+    <label for="recipients">{{ t('rules.form.recipients') }}</label>
+    <textarea id="recipients" name="recipients" rows="3"
+              title="{{ t('rules.form.recipients.help') }}"
+              aria-describedby="recipients-help{% if form.errors.recipients %} recipients-error{% endif %}"
+              {% if form.errors.recipients %}aria-invalid="true"{% endif %}>{{ form.recipients }}</textarea>
+    <span id="recipients-help" class="visually-hidden">{{ t('rules.form.recipients.help') }}</span>
+    {% if form.errors.recipients %}<span id="recipients-error" class="error">{{ t(form.errors.recipients, emails=form.errors.recipients_detail) }}</span>{% endif %}
+  </div>
+
+  <div class="actions">
+    <button type="submit" name="action" value="save" class="primary">{{ t('rules.form.save') }}</button>
+    <button type="submit" name="action" value="preview" class="link"
+            hx-post="/rules/preview" hx-target="#preview" hx-include="#profile-form" hx-indicator="#preview">{{ t('rules.form.preview') }}</button>
+    <a href="/rules">{{ t('rules.form.cancel') }}</a>
+    {% if profile %}<a href="/rules/{{ profile.id }}/delete" class="end">{{ t('rules.form.delete') }}</a>{% endif %}
+  </div>
+</form>
+
+<section id="preview" aria-live="polite"
+         hx-post="/rules/preview" hx-include="#profile-form"
+         hx-trigger="input[target.name=='rule_text'||target.name=='threshold'] delay:800ms from:#profile-form">
+  {% include "rules/_preview.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% import "_macros.html" as m with context %}
+{% if preview %}
+<h2>{{ t('rules.preview.title') }}</h2>
+{% if preview.error %}
+<p class="error" role="alert">{{ t(preview.error) }}</p>
+{% else %}
+<p>{{ t('rules.preview.summary', matched=preview.matched | length, total=preview.total) }}</p>
+{% if preview.matched %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col">{{ t('bills.col.number') }}</th>
+      <th scope="col">{{ t('bills.col.title') }}</th>
+      <th scope="col" class="num">{{ t('bills.col.score') }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in preview.matched %}
+    <tr>
+      <td class="nowrap">{{ item.row.bill_number }}</td>
+      <td><a href="/bills/{{ item.row.bill_number }}">{{ item.row.title }}</a></td>
+      <td class="num"><span class="hint" tabindex="0" title="{{ item.lines | join('\n') }}" aria-describedby="pv-{{ loop.index }}">{{ m.score(item.row.profile_score) }}</span><ul id="pv-{{ loop.index }}" class="visually-hidden">{% for line in item.lines %}<li>{{ line }}</li>{% endfor %}</ul></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}
+{% endif %}

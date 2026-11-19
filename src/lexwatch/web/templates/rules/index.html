@@ -1,5 +1,36 @@
 {% extends "base.html" %}
 {% block title %}{{ t('rules.title') }} · {{ t('app.name') }}{% endblock %}
 {% block content %}
-<h1>{{ t('rules.title') }}</h1>
+<div class="heading">
+  <h1>{{ t('rules.title') }}</h1>
+  <a href="/rules/new">{{ t('rules.new') }}</a>
+</div>
+{% if rows %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col">{{ t('rules.col.name') }}</th>
+      {% if show_owner %}<th scope="col">{{ t('rules.col.owner') }}</th>{% endif %}
+      <th scope="col" class="num">{{ t('rules.col.rules') }}</th>
+      <th scope="col" class="num">{{ t('rules.col.threshold') }}</th>
+      <th scope="col">{{ t('rules.col.state') }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    {% set p = row.profile %}
+    <tr>
+      <td><a href="/rules/{{ p.id }}">{{ p.name }}</a></td>
+      {% if show_owner %}<td>{{ p.owner.name or p.owner.email }}</td>{% endif %}
+      <td class="num">{{ row.rule_count }}</td>
+      <td class="num">{% if p.threshold is not none %}{{ fmt(p.threshold) }}{% else %}<span class="hint" tabindex="0" title="{{ t('rules.threshold.default') }}" aria-describedby="default-help">{{ default_threshold }}</span>{% endif %}</td>
+      {% include "rules/_status.html" %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<span id="default-help" class="visually-hidden">{{ t('rules.threshold.default') }}</span>
+{% else %}
+<p>{{ t('rules.empty') }}</p>
+{% endif %}
 {% endblock %}

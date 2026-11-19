@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ t('rules.delete.title', name=profile.name) }} · {{ t('app.name') }}{% endblock %}
+{% block content %}
+<h1>{{ t('rules.delete.title', name=profile.name) }}</h1>
+<p>{{ t('rules.delete.confirm') }}</p>
+<form method="post" action="/rules/{{ profile.id }}/delete" class="actions">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="primary danger">{{ t('rules.delete.submit') }}</button>
+  <a href="/rules/{{ profile.id }}">{{ t('rules.form.cancel') }}</a>
+</form>
+{% endblock %}
