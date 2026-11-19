@@ -53,8 +53,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    for router in (health.router, auth.router, i18n.router, bills.router, rules.router,
-                   admin.router):
+    for router in (
+        health.router,
+        auth.router,
+        i18n.router,
+        bills.router,
+        rules.router,
+        admin.router,
+    ):
         app.include_router(router)
 
     @app.exception_handler(NotAuthenticated)

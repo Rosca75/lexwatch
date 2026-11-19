@@ -74,9 +74,7 @@ def upgrade() -> None:
             "score_state IN ('pending', 'scored', 'unscored')", name="ck_bills_score_state"
         ),
     )
-    op.create_index(
-        "ix_bills_search_vector", "bills", ["search_vector"], postgresql_using="gin"
-    )
+    op.create_index("ix_bills_search_vector", "bills", ["search_vector"], postgresql_using="gin")
     op.create_index("ix_bills_filing_date", "bills", ["filing_date"])
     op.create_index("ix_bills_score_state", "bills", ["score_state"])
 

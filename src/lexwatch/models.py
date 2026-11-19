@@ -89,9 +89,7 @@ class User(Base):
     language: Mapped[str] = mapped_column(String(2), default="fr", server_default="fr")
     last_visit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     previous_visit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     profiles: Mapped[list[Profile]] = relationship(back_populates="owner")
 
@@ -150,9 +148,7 @@ class BillEvent(Base):
     field: Mapped[str] = mapped_column(String(64))
     old_value: Mapped[str | None] = mapped_column(Text)
     new_value: Mapped[str | None] = mapped_column(Text)
-    changed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     source: Mapped[str] = mapped_column(String(32))
 
     bill: Mapped[Bill] = relationship(back_populates="events")
@@ -162,7 +158,9 @@ class Profile(Base):
     __tablename__ = "profiles"
     __table_args__ = (
         CheckConstraint(_in("rescore_status", RESCORE_STATUSES), name="rescore_status"),
-        CheckConstraint("threshold IS NULL OR (threshold >= 0 AND threshold <= 1)", name="threshold"),
+        CheckConstraint(
+            "threshold IS NULL OR (threshold >= 0 AND threshold <= 1)", name="threshold"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -170,13 +168,9 @@ class Profile(Base):
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     threshold: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))  # NULL = default
     recipients: Mapped[str] = mapped_column(Text, default="", server_default="")
-    rescore_status: Mapped[str] = mapped_column(
-        String(16), default="idle", server_default="idle"
-    )
+    rescore_status: Mapped[str] = mapped_column(String(16), default="idle", server_default="idle")
     last_digest_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -221,9 +215,7 @@ class RuleScore(Base):
     )
     score: Mapped[float] = mapped_column(Float)
     model: Mapped[str] = mapped_column(String(128))
-    scored_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Match(Base):
@@ -258,9 +250,7 @@ class Run(Base):
     kind: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="queued", server_default="queued")
     requested_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     bills_added: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -270,6 +260,4 @@ class Run(Base):
     billed_units: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     error_message: Mapped[str | None] = mapped_column(Text)
     # Free-form per-step status, e.g. {"sources": {"chd": {"status": "failed", "error": "..."}}}
-    details: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, default=dict, server_default="{}"
-    )
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")

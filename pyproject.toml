@@ -69,4 +69,7 @@ known-first-party = ["lexwatch"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-filterwarnings = ["ignore::DeprecationWarning:authlib.*"]
+filterwarnings = [
+    "ignore::DeprecationWarning:authlib.*",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]

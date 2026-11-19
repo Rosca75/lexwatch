@@ -8,22 +8,39 @@ missing key is visible on screen and caught by the i18n coverage test).
 from __future__ import annotations
 
 import json
-from functools import lru_cache
+from functools import cache
 from importlib import resources
 
 LANGUAGES: tuple[str, ...] = ("fr", "en")
 DEFAULT_LANGUAGE = "fr"
 
 
-@lru_cache(maxsize=None)
+@cache
 def catalog(lang: str) -> dict[str, str]:
+    """Merged catalog for ``lang``: ``{lang}.json`` plus any ``{lang}.<part>.json``.
+
+    Part files let streams own their keys without editing the same file (e.g. ``fr.mail.json``
+    for digest strings). A key defined twice is an error.
+    """
     if lang not in LANGUAGES:
         raise KeyError(lang)
-    text = resources.files(__package__).joinpath(f"{lang}.json").read_text(encoding="utf-8")
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise ValueError(f"i18n/{lang}.json must be a flat JSON object")
-    return {str(k): str(v) for k, v in data.items()}
+    root = resources.files(__package__)
+    names = sorted(
+        entry.name
+        for entry in root.iterdir()
+        if entry.name == f"{lang}.json"
+        or (entry.name.startswith(f"{lang}.") and entry.name.endswith(".json"))
+    )
+    merged: dict[str, str] = {}
+    for name in names:
+        data = json.loads(root.joinpath(name).read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"i18n/{name} must be a flat JSON object")
+        for key, value in data.items():
+            if key in merged:
+                raise ValueError(f"i18n key {key!r} defined twice ({name})")
+            merged[str(key)] = str(value)
+    return merged
 
 
 def load_catalogs() -> None:

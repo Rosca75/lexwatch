@@ -75,15 +75,17 @@ class Settings:
     scorer: str = "foundry"  # foundry | local | fake
     default_threshold: float = 0.5
     scoring_max_chars: int = 4000
-    foundry_endpoint: str = ""  # https://<resource>.services.ai.azure.com/providers/cohere/v2/rerank
+    foundry_endpoint: str = (
+        ""  # https://<resource>.services.ai.azure.com/providers/cohere/v2/rerank
+    )
     foundry_model: str = "Cohere-rerank-v5-fast"
     foundry_api_key: str = ""  # if empty, Entra ID (azure-identity) is used
     foundry_token_scope: str = "https://cognitiveservices.azure.com/.default"
     foundry_timeout_seconds: float = 30.0
     foundry_max_retries: int = 4
-    foundry_max_documents: int = 1000
+    foundry_max_documents: int = 100
     local_model_dir: str = "/models/bge-reranker-v2-m3"
-    local_model_repo: str = "BAAI/bge-reranker-v2-m3"
+    local_model_repo: str = "onnx-community/bge-reranker-v2-m3-ONNX"
 
     # --- email ---------------------------------------------------------------------------
     smtp_host: str = ""

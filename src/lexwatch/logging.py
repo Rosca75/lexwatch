@@ -16,9 +16,12 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-_RESERVED = set(
-    logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys()
-) | {"message", "asctime", "taskName"}
+_RESERVED = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys()) | {
+    "message",
+    "asctime",
+    "taskName",
+    "color_message",  # uvicorn duplicate of msg with ANSI codes
+}
 
 
 class JsonFormatter(logging.Formatter):

@@ -13,7 +13,7 @@ from lexwatch.i18n import catalog, t
 from lexwatch.scoring.base import Scorer
 from lexwatch.scoring.factory import get_scorer
 from lexwatch.web.app import create_app
-from tests.conftest import csrf_token
+from tests.helpers import csrf_token
 
 
 def test_migrations_create_schema(engine):
@@ -104,3 +104,24 @@ def test_cli_parser():
     parser = build_parser()
     assert parser.parse_args(["rescore", "--profile", "3"]).profile == 3
     assert parser.parse_args(["send-digest", "--dry-run"]).dry_run is True
+
+
+def test_models_match_migrations(engine):
+    """Models and Alembic migrations must not drift (same check as `alembic check`)."""
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+
+    from lexwatch.models import Base
+
+    with engine.connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
+    assert diff == []
+
+
+def test_cli_migrate_is_idempotent(engine, settings):
+    """`lexwatch migrate` (advisory-locked) succeeds on an up-to-date database."""
+    import argparse
+
+    from lexwatch.cli import cmd_migrate
+
+    assert cmd_migrate(settings, argparse.Namespace(revision="head")) == 0

@@ -48,7 +48,7 @@ def claim_queued_run(session: Session) -> Run | None:
     stmt = (
         select(Run)
         .where(Run.status == "queued")
-        .order_by(Run.created_at)
+        .order_by(Run.created_at, Run.id)
         .limit(1)
         .with_for_update(skip_locked=True)
     )

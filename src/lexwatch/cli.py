@@ -33,10 +33,28 @@ def _alembic_config(settings: Settings):
     return cfg
 
 
+MIGRATION_LOCK_ID = 7_431_001  # pg advisory lock: app and worker may both migrate at start
+
+
 def cmd_migrate(settings: Settings, args: argparse.Namespace) -> int:
     from alembic import command
+    from sqlalchemy import create_engine, text
 
-    command.upgrade(_alembic_config(settings), args.revision)
+    cfg = _alembic_config(settings)
+    engine = create_engine(settings.database_url)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT pg_advisory_lock(:id)"), {"id": MIGRATION_LOCK_ID})
+            conn.commit()
+            try:
+                cfg.attributes["connection"] = conn
+                command.upgrade(cfg, args.revision)
+                conn.commit()
+            finally:
+                conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": MIGRATION_LOCK_ID})
+                conn.commit()
+    finally:
+        engine.dispose()
     log.info("migrate.done", extra={"revision": args.revision})
     return 0
 

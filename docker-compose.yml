@@ -1,0 +1,81 @@
+# lexwatch: copy .env.example to .env, fill it in, then `docker compose up -d`.
+#
+# Optional local scorer (no Azure): in .env set SCORER=local and INSTALL_LOCAL_SCORER=1, then
+#   docker compose --profile local-scorer up model-download   (one-shot, fills the models volume)
+#   docker compose up -d --build
+
+x-app: &app
+  build:
+    context: .
+    args:
+      INSTALL_LOCAL_SCORER: ${INSTALL_LOCAL_SCORER:-0}
+  image: lexwatch:${LEXWATCH_TAG:-latest}
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-lexwatch}:${POSTGRES_PASSWORD:-lexwatch}@db:5432/${POSTGRES_DB:-lexwatch}
+    LOCAL_MODEL_DIR: /models/bge-reranker-v2-m3
+  volumes:
+    - models:/models:ro
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *app
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["worker"]
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lexwatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lexwatch}
+      POSTGRES_DB: ${POSTGRES_DB:-lexwatch}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  model-download:
+    profiles: ["local-scorer"]
+    build:
+      context: .
+      args:
+        INSTALL_LOCAL_SCORER: "1"
+    image: lexwatch:${LEXWATCH_TAG:-latest}-local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LOCAL_MODEL_DIR: /models/bge-reranker-v2-m3
+    command: ["download-model"]
+    volumes:
+      - models:/models
+    restart: "no"
+
+volumes:
+  pgdata:
+  models:
