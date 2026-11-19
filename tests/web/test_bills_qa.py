@@ -76,11 +76,6 @@ def test_search_with_accents(user_client, me, corpus):
     assert search(user_client, "pêche") == [corpus["fish"]]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG/gap: search is accent-sensitive ('securite' does not find 'sécurité'); "
-    "the French tsvector has no unaccent. Users often type without accents.",
-)
 def test_search_without_accents_finds_accented_titles(user_client, me, corpus):
     assert search(user_client, "securite") == [corpus["reg"]]
     assert search(user_client, "peche") == [corpus["fish"]]
@@ -124,11 +119,6 @@ def test_search_with_hostile_input_never_errors(user_client, me, corpus, q):
     assert len(numbers(response.text)) < len(corpus)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a NUL byte in the search query reaches PostgreSQL (DataError, 500). "
-    "Expected: 200 (byte stripped or no results).",
-)
 def test_search_with_nul_byte_never_errors(user_client, me, corpus):
     assert user_client.get("/", params={"q": "abc\x00", "all": "1"}).status_code == 200
 
@@ -248,11 +238,6 @@ def test_page_past_the_end_is_empty_not_error(user_client, many):
     assert numbers(response.text) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a huge page number overflows the SQL OFFSET (bigint) and raises a 500. "
-    "Expected: 200 with an empty page (or clamped).",
-)
 def test_huge_page_number_is_not_500(user_client, many):
     assert user_client.get("/?page=999999999999999999999").status_code == 200
 
@@ -358,11 +343,6 @@ def test_detail_unknown_numbers_404(user_client, me, number):
     assert "<script>" not in response.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: /bills/{number} with a NUL byte (%00) in the path reaches PostgreSQL "
-    "(DataError, 500). Expected: 404.",
-)
 def test_detail_number_with_nul_byte_is_404(user_client, me):
     response = user_client.get("/bills/8410%00", headers={"Accept": "text/html"})
     assert response.status_code == 404
@@ -377,12 +357,6 @@ def test_bill_title_and_fields_are_escaped(user_client, db, me):
         assert "<img" not in page, path
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: bill.dossier_url from the source is used as href without a scheme check; "
-    "a javascript: URL becomes a clickable link. Expected: only http(s) links (pdf_url and "
-    "documents already get this check).",
-)
 def test_detail_dossier_url_rejects_javascript_scheme(user_client, db, me):
     bill = make_bill(db, dossier_url="javascript:alert(document.cookie)")
     page = user_client.get(f"/bills/{bill.number}").text

@@ -166,5 +166,8 @@
   "bill.source.chd": "Chambre des Députés du Grand-Duché de Luxembourg",
   "bill.committee": "Committee",
   "bill.rapporteur": "Rapporteur",
-  "bill.documents": "Documents"
+  "bill.documents": "Documents",
+  "rules.error.chars": "This field contains characters that are not allowed.",
+  "rules.error.too_many": "50 rules at most.",
+  "rules.error.no_rules": "Add at least one rule."
 }

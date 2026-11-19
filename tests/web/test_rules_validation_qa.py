@@ -143,11 +143,6 @@ def test_name_at_limit_accepted(user_client, db, me):
     assert saved(db, "N" * 200) is not None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a NUL byte in a form field reaches PostgreSQL and raises DataError (500). "
-    "Expected: 422 validation error (or the byte stripped).",
-)
 def test_name_with_nul_byte_is_rejected_not_500(user_client, db, me):
     response = post_profile(user_client, name="AML\x00evil")
     assert response.status_code in (303, 422)
@@ -156,11 +151,6 @@ def test_name_with_nul_byte_is_rejected_not_500(user_client, db, me):
         assert "\x00" not in profile.name
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: profile name accepts CR/LF (crafted POST); the name ends up in pages and "
-    "can reach the digest subject header. Expected: rejected or whitespace-normalized.",
-)
 def test_name_with_newlines_is_normalized_or_rejected(user_client, db, me):
     response = post_profile(user_client, name="AML\r\nBcc: evil@example.org")
     assert response.status_code in (303, 422)
@@ -207,11 +197,6 @@ def test_fifty_rules_are_accepted(user_client, db, me):
     assert [r.position for r in profile.rules] == list(range(50))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: posting more than 50 rules silently drops rules 51+ and saves (303). "
-    "Expected: a validation error (422) or all rules saved; never silent data loss.",
-)
 def test_more_than_fifty_rules_is_not_silently_truncated(user_client, db, me):
     texts = [f"regle {i}" for i in range(60)]
     response = post_profile(user_client, name="Sixty", rule_id=[""] * 60, rule_text=texts)
@@ -237,11 +222,6 @@ def test_unknown_or_out_of_range_actions_do_not_save_or_crash(user_client, db, m
     assert saved(db, "Act") is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a NUL byte in a form field reaches PostgreSQL and raises DataError (500). "
-    "Expected: 422 validation error (or the byte stripped).",
-)
 def test_rules_with_nul_byte_are_rejected_not_500(user_client, db, me):
     response = post_profile(user_client, name="Nul", rule_text=["abc\x00def"])
     assert response.status_code in (303, 422)
@@ -289,11 +269,6 @@ def test_invalid_or_header_injection_recipients_rejected(user_client, db, me, ra
     assert "<script>" not in response.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a NUL byte in a form field reaches PostgreSQL and raises DataError (500). "
-    "Expected: 422 validation error (or the byte stripped).",
-)
 def test_recipients_with_nul_or_control_chars_rejected_not_500(user_client, db, me):
     response = post_profile(user_client, name="Ctl", recipients="a@example.org\x00")
     assert response.status_code == 422

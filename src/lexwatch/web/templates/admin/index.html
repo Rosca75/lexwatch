@@ -11,7 +11,7 @@
   </form>
   <form method="post" action="/admin/rescore">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="link" title="{{ t('admin.rescore_all.help') }}" aria-describedby="rescore-help">{{ t('admin.rescore_all') }}</button>
+    <button type="submit" class="primary" title="{{ t('admin.rescore_all.help') }}" aria-describedby="rescore-help">{{ t('admin.rescore_all') }}</button>
     <span id="rescore-help" class="visually-hidden">{{ t('admin.rescore_all.help') }}</span>
   </form>
 </div>

@@ -22,8 +22,9 @@ from sqlalchemy.orm import Session
 
 from lexwatch.db import get_db
 from lexwatch.jobs.daily import create_run
-from lexwatch.models import Bill, Match, Profile, RuleScore, Run, User
-from lexwatch.scoring.factory import get_scorer
+from lexwatch.models import Bill, Match, Profile, Run, User
+from lexwatch.scoring.factory import model_name_for
+from lexwatch.scoring.service import stale_score_count
 from lexwatch.web.deps import require_admin
 from lexwatch.web.routes.bills import bill_order, format_dt
 from lexwatch.web.templating import render
@@ -52,10 +53,10 @@ def _duration(run: Run) -> str:
 def _stale_scores(request: Request, db: Session) -> int | None:
     """Rule scores computed with another model than the configured one (None if unknown)."""
     try:
-        model = get_scorer(request.app.state.settings).model_name
+        model = model_name_for(request.app.state.settings)
     except Exception:
         return None
-    return db.scalar(select(func.count(RuleScore.id)).where(RuleScore.model != model)) or 0
+    return stale_score_count(db, model)
 
 
 @router.get("")
@@ -166,7 +167,13 @@ def _csv_stream(header: list[str], rows: Iterable[Iterable[Any]]) -> Iterator[st
     yield buffer.getvalue()
 
 
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
 def _cell(value: Any) -> Any:
+    """CSV cell; text that a spreadsheet would read as a formula gets a leading apostrophe."""
+    if isinstance(value, str):
+        return "'" + value if value.startswith(FORMULA_PREFIXES) else value
     if isinstance(value, datetime):
         return value.astimezone(UTC).isoformat(timespec="seconds")
     if hasattr(value, "isoformat"):

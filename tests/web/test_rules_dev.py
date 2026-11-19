@@ -80,10 +80,14 @@ def test_create_validation_errors(user_client, db):
     assert db.scalar(select(Profile)) is None
 
 
-def test_edit_form_renders(client, db):
+def test_edit_form_renders(client, db, settings):
+    from lexwatch.scoring.factory import default_threshold_for
+    from lexwatch.web.routes.rules import format_threshold
+
     profile = make_profile(db, dev_user(db, "admin"), "AML", ("r1", "r2"))
     html = client.get(f"/rules/{profile.id}").text
-    assert 'placeholder="0,50"' in html  # default threshold as placeholder
+    default = format_threshold(default_threshold_for(settings), "fr")
+    assert f'placeholder="{default}"' in html  # default threshold as placeholder
     assert 'value="up-1"' in html and 'value="down-0"' in html
     assert 'hx-post="/rules/preview"' in html
 
@@ -160,7 +164,7 @@ def _not_implemented(*args, **kwargs):
 
 
 def test_threshold_only_change_without_compute_matches_queues_rescore(client, db, monkeypatch):
-    monkeypatch.setattr(scoring_service, "compute_matches", _not_implemented)
+    monkeypatch.setattr(scoring_service, "recompute_profile_matches", _not_implemented)
     profile = make_profile(db, dev_user(db, "admin"), "AML", ("r1",))
     _post(client, f"/rules/{profile.id}", **_form(profile, threshold="0.7"))
     profile = db.get(Profile, profile.id)
@@ -171,7 +175,9 @@ def test_threshold_only_change_without_compute_matches_queues_rescore(client, db
 def test_threshold_only_change_recomputes_matches(client, db, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        scoring_service, "compute_matches", lambda s, p, d=None: calls.append((p.id, d)) or 0
+        scoring_service,
+        "recompute_profile_matches",
+        lambda s, pid, settings=None: calls.append((pid, settings.default_threshold)) or 0,
     )
     profile = make_profile(db, dev_user(db, "admin"), "AML", ("r1",))
     _post(client, f"/rules/{profile.id}", **_form(profile, threshold="0.7"))
@@ -327,3 +333,10 @@ def test_preview_needs_rules(client):
         "/rules/preview", data={"rule_text": [" "], "csrf_token": csrf_token(client)}
     )
     assert "Ajoutez une règle" in response.text
+
+
+def test_profile_without_rules_is_rejected(user_client, db):
+    response = _post(user_client, "/rules/new", name="Empty", rule_id=["", ""], rule_text=["", " "])
+    assert response.status_code == 422
+    assert "Ajoutez au moins une règle." in response.text
+    assert db.scalar(select(Profile)) is None

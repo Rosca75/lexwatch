@@ -468,11 +468,6 @@ def test_content_forms_have_exactly_one_primary_button(pages_both, screen):
             assert len(_primary_buttons(form)) == 1, (lang, screen, form.attrs)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Spec deviation (minor, debatable): on /admin the 'Rescore all' form has no primary "
-    "button (link-styled). Spec 7 says one primary button per form.",
-)
 def test_admin_forms_have_exactly_one_primary_button(pages_both):
     for form in _forms(_main(dom(pages_both["fr:admin"]))):
         assert len(_primary_buttons(form)) == 1, form.attrs

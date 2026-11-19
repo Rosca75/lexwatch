@@ -1,9 +1,10 @@
 """Profiles and rules management (stream 3).
 
 Saving rules or the threshold sets ``profile.rescore_status='pending'`` (the worker rescores).
-A threshold-only change recomputes matches directly when scoring provides
-``compute_matches``, else it is queued as well. Users manage their own profiles; admins
-manage all of them (403 otherwise, 404 when the profile does not exist).
+A threshold-only change recomputes matches from stored scores
+(``scoring.service.recompute_profile_matches``); if that fails a rescore is queued instead.
+Users manage their own profiles; admins manage all of them (403 otherwise, 404 when the
+profile does not exist).
 
 The edit form works without JavaScript: the add, remove, up and down buttons post the
 unsaved form back with an ``action`` and the page is rendered again with the change applied;
@@ -21,16 +22,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from lexwatch.db import get_db
 from lexwatch.i18n import t
-from lexwatch.models import Profile, Rule, RuleScore, User
+from lexwatch.models import Profile, Rule, User
 from lexwatch.scoring import service as scoring_service
 from lexwatch.scoring.base import ScoringError
-from lexwatch.scoring.factory import get_scorer, scorer_configured
-from lexwatch.web.deps import get_lang, require_user
+from lexwatch.scoring.factory import default_threshold_for, get_scorer, scorer_configured
+from lexwatch.web.deps import can_manage_profile, get_lang, require_user
 from lexwatch.web.routes.bills import format_score
 from lexwatch.web.templating import render
 
@@ -43,7 +44,19 @@ RULE_MAX = 1000
 MAX_RULES = 50
 PREVIEW_LIMIT = 50
 EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
+MAX_RULES_PARSED = 200  # more is a validation error (never silently dropped) up to this cap
 ACTION_RE = re.compile(r"^(remove|up|down)-(\d+)$")
+# Control characters never belong in these fields (NUL also breaks PostgreSQL text).
+CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+INT32_MAX = 2**31 - 1
+
+
+def _clean(value: object, field_name: str, bad: set[str]) -> str:
+    text = str(value or "")
+    if CONTROL_RE.search(text):
+        bad.add(field_name)
+        text = CONTROL_RE.sub("", text)
+    return text
 
 
 @dataclass
@@ -53,6 +66,8 @@ class ProfileForm:
     recipients: str = ""
     rules: list[tuple[int | None, str]] = field(default_factory=list)
     errors: dict[str, str] = field(default_factory=dict)
+    bad_chars: set[str] = field(default_factory=set)
+    too_many_rules: bool = False
 
     @classmethod
     def from_profile(cls, profile: Profile, lang: str) -> ProfileForm:
@@ -67,22 +82,28 @@ class ProfileForm:
     @classmethod
     async def from_request(cls, request: Request) -> tuple[ProfileForm, str]:
         form = await request.form()
+        bad: set[str] = set()
         ids = form.getlist("rule_id")
         texts = form.getlist("rule_text")
         rules: list[tuple[int | None, str]] = []
-        for i, text in enumerate(texts[:MAX_RULES]):
+        for i, text in enumerate(texts[:MAX_RULES_PARSED]):
             raw_id = ids[i] if i < len(ids) else ""
-            rule_id = int(raw_id) if isinstance(raw_id, str) and raw_id.isdigit() else None
-            rules.append((rule_id, str(text)))
-        return (
-            cls(
-                name=str(form.get("name") or "").strip(),
-                threshold=str(form.get("threshold") or "").strip(),
-                recipients=str(form.get("recipients") or ""),
-                rules=rules,
-            ),
-            str(form.get("action") or "save"),
+            rule_id = (
+                int(raw_id)
+                if isinstance(raw_id, str) and raw_id.isdigit() and int(raw_id) <= INT32_MAX
+                else None
+            )
+            rules.append((rule_id, _clean(text, "rules", bad)))
+        result = cls(
+            # Whitespace (CR/LF included) collapses to single spaces in the name.
+            name=" ".join(_clean(form.get("name"), "name", bad).split()),
+            threshold=_clean(form.get("threshold"), "threshold", bad).strip(),
+            recipients=_clean(form.get("recipients"), "recipients", bad),
+            rules=rules,
+            bad_chars=bad,
+            too_many_rules=len(texts) > MAX_RULES,
         )
+        return result, str(form.get("action") or "save")
 
     def rule_texts(self) -> list[str]:
         return [" ".join(text.split()) for _, text in self.rules if text.strip()]
@@ -109,19 +130,32 @@ class ProfileForm:
     def validate(self) -> tuple[Decimal | None, list[str]]:
         threshold: Decimal | None = None
         recipients: list[str] = []
-        if not self.name:
+        if "name" in self.bad_chars:
+            self.errors["name"] = "rules.error.chars"
+        elif not self.name:
             self.errors["name"] = "rules.error.name"
         elif len(self.name) > NAME_MAX:
             self.errors["name"] = "rules.error.name_long"
         try:
+            if "threshold" in self.bad_chars:
+                raise ValueError(self.threshold)
             threshold = self.parsed_threshold()
         except ValueError:
             self.errors["threshold"] = "rules.error.threshold"
         recipients, invalid = self.parsed_recipients()
-        if invalid:
+        if "recipients" in self.bad_chars:
+            self.errors["recipients"] = "rules.error.chars"
+        elif invalid:
             self.errors["recipients"] = "rules.error.recipients"
             self.errors["recipients_detail"] = ", ".join(invalid)
-        if any(len(text) > RULE_MAX for text in self.rule_texts()):
+        texts = self.rule_texts()
+        if "rules" in self.bad_chars:
+            self.errors["rules"] = "rules.error.chars"
+        elif self.too_many_rules or len(texts) > MAX_RULES:
+            self.errors["rules"] = "rules.error.too_many"
+        elif not texts:
+            self.errors["rules"] = "rules.error.no_rules"
+        elif any(len(text) > RULE_MAX for text in texts):
             self.errors["rules"] = "rules.error.rule_long"
         return threshold, recipients
 
@@ -156,13 +190,8 @@ def format_threshold(value: Decimal | float, lang: str) -> str:
     return text.replace(".", ",") if lang == "fr" else text
 
 
-def can_manage_profile(user: User, profile: Profile) -> bool:
-    """Owner or admin (same rule as ``deps.can_manage_profile`` from the auth stream)."""
-    return user.is_admin or profile.owner_id == user.id
-
-
 def get_profile_for(db: Session, user: User, profile_id: int) -> Profile:
-    profile = db.get(Profile, profile_id)
+    profile = db.get(Profile, profile_id) if 0 < profile_id <= INT32_MAX else None
     if profile is None:
         raise HTTPException(status_code=404)
     if not can_manage_profile(user, profile):
@@ -171,7 +200,7 @@ def get_profile_for(db: Session, user: User, profile_id: int) -> Profile:
 
 
 def _default_threshold(request: Request) -> float:
-    return float(request.app.state.settings.default_threshold)
+    return float(default_threshold_for(request.app.state.settings))
 
 
 def _form_context(
@@ -356,7 +385,7 @@ async def _handle_form(
             rules_changed = True
         elif rule.text != text:
             # New text, new meaning: stored scores of this rule no longer apply.
-            db.execute(delete(RuleScore).where(RuleScore.rule_id == rule.id))
+            scoring_service.invalidate_rule_scores(db, rule.id)
             rule.text = text
             rules_changed = True
         rule.position = position
@@ -369,10 +398,9 @@ async def _handle_form(
     profile.rules = new_rules
     db.flush()
 
-    threshold_changed = old_threshold != threshold and bool(old_rules or new_rules)
-    if rules_changed and new_rules:
+    if rules_changed:
         profile.rescore_status = "pending"
-    elif rules_changed or threshold_changed:
+    elif old_threshold != threshold:
         _recompute_matches(request, db, profile)
     db.commit()
     log.info("rules.profile_saved", extra={"profile_id": profile.id, "user_id": user.id})
@@ -380,12 +408,10 @@ async def _handle_form(
 
 
 def _recompute_matches(request: Request, db: Session, profile: Profile) -> None:
-    """Threshold-only change (or all rules removed): recompute matches, else queue a rescore."""
+    """Threshold-only change: recompute matches from stored scores, else queue a rescore."""
     try:
         with db.begin_nested():
-            scoring_service.compute_matches(db, profile, _default_threshold(request))
-    except NotImplementedError:
-        profile.rescore_status = "pending"
+            scoring_service.recompute_profile_matches(db, profile.id, request.app.state.settings)
     except Exception:
         log.exception("rules.compute_matches_failed", extra={"profile_id": profile.id})
         profile.rescore_status = "pending"
