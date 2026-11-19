@@ -248,6 +248,26 @@ def test_execute_rescore_counts_only_its_own_billed_units(db, settings, profile)
     assert run.billed_units == scorer.billed_units - 40 >= 1
 
 
+def test_worker_startup_recovers_interrupted_work(db, profile):
+    profile.rescore_status = "running"
+    stale = Run(kind="rescore", status="running", started_at=datetime.now(UTC))
+    done = Run(kind="daily", status="success")
+    queued = Run(kind="manual", status="queued")
+    db.add_all([stale, done, queued])
+    db.flush()
+
+    assert worker.recover_interrupted(db) == (1, 1)
+
+    for obj in (profile, stale, done, queued):
+        db.refresh(obj)
+    assert profile.rescore_status == "pending"
+    assert stale.status == "failed"
+    assert stale.error_message == "interrupted (worker restarted)"
+    assert stale.finished_at is not None
+    assert (done.status, queued.status) == ("success", "queued")
+    assert worker.recover_interrupted(db) == (0, 0)
+
+
 # -- 2b. CLI rescore ----------------------------------------------------------------------------
 
 

@@ -21,7 +21,7 @@ import threading
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from lexwatch.config import Settings
@@ -98,6 +98,36 @@ def tick(session: Session, settings: Settings) -> None:
             finish_rescore_status(session, profile_id)
 
 
+INTERRUPTED = "interrupted (worker restarted)"
+
+
+def recover_interrupted(session: Session) -> tuple[int, int]:
+    """Clean up after a worker that died mid-work; call once at startup. Commits.
+
+    Profiles left ``running`` go back to ``pending`` (rescored again), and runs left
+    ``running`` become ``failed`` with ``INTERRUPTED``. Only one worker replica is expected,
+    so nothing else can be running at this point. Returns ``(profiles, runs)`` reset.
+    """
+    from lexwatch.jobs.daily import utcnow
+
+    profiles = session.execute(
+        update(Profile)
+        .where(Profile.rescore_status == "running")
+        .values(rescore_status="pending", updated_at=Profile.updated_at)
+        .execution_options(synchronize_session="fetch")
+    ).rowcount
+    runs = session.execute(
+        update(Run)
+        .where(Run.status == "running")
+        .values(status="failed", error_message=INTERRUPTED, finished_at=utcnow())
+        .execution_options(synchronize_session="fetch")
+    ).rowcount
+    session.commit()
+    if profiles or runs:
+        log.warning("worker.recovered", extra={"profiles": profiles, "runs": runs})
+    return int(profiles or 0), int(runs or 0)
+
+
 def run_worker(settings: Settings) -> None:
     from lexwatch.db import get_engine, make_sessionmaker
 
@@ -106,6 +136,11 @@ def run_worker(settings: Settings) -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stop.set())
     log.info("worker.started", extra={"poll_seconds": settings.worker_poll_seconds})
+    try:
+        with factory() as session:
+            recover_interrupted(session)
+    except Exception:
+        log.exception("worker.recover_failed")
     while not stop.is_set():
         try:
             with factory() as session:
