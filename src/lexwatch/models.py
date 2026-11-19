@@ -35,7 +35,7 @@ ROLES = ("admin", "user")
 LANGUAGES = ("fr", "en")
 SCORE_STATES = ("pending", "scored", "unscored")
 RESCORE_STATUSES = ("idle", "pending", "running")
-RUN_KINDS = ("daily", "manual", "rescore")
+RUN_KINDS = ("daily", "manual", "rescore", "preview")
 RUN_STATUSES = ("queued", "running", "success", "partial", "failed")
 
 # Bill fields whose changes are recorded in bill_events (ingestion stream).

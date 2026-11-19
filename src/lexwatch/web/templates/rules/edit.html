@@ -68,9 +68,7 @@
   </div>
 </form>
 
-<section id="preview" aria-live="polite"
-         hx-post="/rules/preview" hx-include="#profile-form"
-         hx-trigger="input[target.name=='rule_text'||target.name=='threshold'] delay:800ms from:#profile-form">
+<section id="preview" aria-live="polite">
   {% include "rules/_preview.html" %}
 </section>
 {% endblock %}
