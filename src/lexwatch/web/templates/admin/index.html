@@ -20,7 +20,7 @@
 <dl class="meta">
   <dt>{{ t('admin.state.bills') }}</dt><dd>{{ bills_total }}</dd>
   <dt>{{ t('admin.state.pending') }}</dt><dd>{{ bills_pending }}</dd>
-  <dt>{{ t('admin.state.unscored') }}</dt><dd>{{ bills_unscored }}</dd>
+  <dt><span class="hint" tabindex="0" title="{{ t('admin.state.unscored.help') }}" aria-describedby="unscored-help">{{ t('admin.state.unscored') }}</span><span id="unscored-help" class="visually-hidden">{{ t('admin.state.unscored.help') }}</span></dt><dd>{{ bills_unscored }}</dd>
   {% if stale_scores is not none %}<dt>{{ t('admin.state.stale') }}</dt><dd>{{ stale_scores }}</dd>{% endif %}
   <dt>{{ t('admin.state.rescoring') }}</dt><dd>{{ rescoring }}</dd>
   <dt>{{ t('admin.state.units') }}</dt><dd>{{ month_units }}{% if unit %} {{ unit }}{% endif %}</dd>
@@ -73,15 +73,19 @@
     {% for row in runs %}
     {% set r = row.run %}
     <tr>
-      <td class="nowrap">{{ row.time }}</td>
+      <td>{% for part in row.time.split(" ") %}<span class="nowrap">{{ part }}</span> {% endfor %}</td>
       <td class="nowrap">{{ row.duration }}</td>
       <td>{{ t('admin.runs.kind.' ~ r.kind) }}</td>
       <td{% if r.status == 'failed' or r.status == 'partial' %} class="error"{% endif %}>{{ t('admin.runs.status.' ~ r.status) }}</td>
+      {% if r.status in ('queued', 'running') %}
+      <td></td><td></td><td></td><td></td><td></td>
+      {% else %}
       <td class="num">{{ r.bills_added }}</td>
       <td class="num">{{ r.bills_changed }}</td>
       <td class="num">{{ r.bills_scored }}</td>
       <td class="num">{{ r.bills_unscored }}</td>
       <td class="num">{{ r.billed_units }}</td>
+      {% endif %}
       <td>{% if r.error_message %}<details><summary>{{ t('admin.runs.show_error') }}</summary><p class="prose">{{ r.error_message }}</p></details>{% endif %}</td>
     </tr>
     {% endfor %}

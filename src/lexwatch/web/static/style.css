@@ -71,8 +71,9 @@ button.link {
 .topbar button.link { font-size: inherit; }
 
 /* Forms: labels above fields. */
-label, legend { display: block; font-weight: 600; margin-bottom: 0.35rem; }
+label, legend { display: block; font-weight: 600; margin-bottom: 0.35rem; padding: 0; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+input[type="text"], input[type="search"], select { height: 2.5rem; }
 input[type="text"], input[type="search"], select, textarea {
   font: inherit; color: var(--text); background: #fff;
   border: 1px solid var(--field); border-radius: 3px; padding: 0.4rem 0.55rem;
@@ -106,13 +107,20 @@ ol.rules li { display: flex; flex-direction: column; gap: 0.35rem; }
 
 /* Tables: plain. */
 table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
-th, td { text-align: left; vertical-align: top; padding: 0.55rem 1rem 0.55rem 0; border-bottom: 1px solid var(--line); }
+th, td { text-align: left; vertical-align: top; padding: 0.55rem 1.5rem 0.55rem 0; border-bottom: 1px solid var(--line); }
 th { font-weight: 600; border-bottom-color: var(--text); }
 th:last-child, td:last-child { padding-right: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 .scroll { overflow-x: auto; }
-td details summary { cursor: pointer; color: var(--accent); }
+td a { text-decoration: none; }
+td a:hover { text-decoration: underline; }
+table.narrow { width: auto; min-width: min(100%, 36rem); }
+td details summary {
+  cursor: pointer; color: var(--accent); list-style: none;
+  text-decoration: underline; text-underline-offset: 0.15em;
+}
+td details summary::-webkit-details-marker { display: none; }
 td details p { margin: 0.5rem 0 0; max-width: 30rem; }
 
 /* New or changed since the last visit: text weight only. */
@@ -132,7 +140,6 @@ dl.meta dd { margin: 0; }
 .links { display: flex; gap: 2rem; flex-wrap: wrap; }
 
 footer { margin: 5rem 0 2rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: var(--size-small); }
-.attribution { margin-top: 3rem; font-size: var(--size-small); }
 
 /* Subtle htmx loading indicator: the region being refreshed fades a little. */
 .htmx-request { opacity: 0.55; transition: opacity 150ms ease-in; }
@@ -141,3 +148,5 @@ footer { margin: 5rem 0 2rem; padding-top: 1rem; border-top: 1px solid var(--lin
   body { padding: 0 1rem; }
   .topbar-end { margin-left: 0; }
 }
+table.runs th, table.runs td { padding-right: 0.9rem; }
+table.runs th:last-child, table.runs td:last-child { padding-right: 0; }
