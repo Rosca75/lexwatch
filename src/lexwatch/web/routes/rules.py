@@ -156,11 +156,16 @@ def format_threshold(value: Decimal | float, lang: str) -> str:
     return text.replace(".", ",") if lang == "fr" else text
 
 
+def can_manage_profile(user: User, profile: Profile) -> bool:
+    """Owner or admin (same rule as ``deps.can_manage_profile`` from the auth stream)."""
+    return user.is_admin or profile.owner_id == user.id
+
+
 def get_profile_for(db: Session, user: User, profile_id: int) -> Profile:
     profile = db.get(Profile, profile_id)
     if profile is None:
         raise HTTPException(status_code=404)
-    if not user.is_admin and profile.owner_id != user.id:
+    if not can_manage_profile(user, profile):
         raise HTTPException(status_code=403)
     return profile
 

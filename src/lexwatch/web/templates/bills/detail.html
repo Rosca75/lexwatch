@@ -11,11 +11,15 @@
   {% if bill.filing_date %}<dt>{{ t('bills.col.filing_date') }}</dt><dd>{{ m.date(bill.filing_date) }}</dd>{% endif %}
   {% if bill.closing_date %}<dt>{{ t('bill.closing_date') }}</dt><dd>{{ m.date(bill.closing_date) }}</dd>{% endif %}
   {% if bill.author %}<dt>{{ t('bill.author') }}</dt><dd>{{ bill.author }}</dd>{% endif %}
+  {% if extra.committee %}<dt>{{ t('bill.committee') }}</dt><dd>{{ extra.committee }}</dd>{% endif %}
+  {% if extra.rapporteur %}<dt>{{ t('bill.rapporteur') }}</dt><dd>{{ extra.rapporteur }}</dd>{% endif %}
   <dt>{{ t('bill.dossier') }}</dt>
   <dd>
     <a href="{{ dossier_url }}" rel="noopener">{{ t('bill.link.dossier') }}</a>
-    {% for key, url in extra_links %} · <a href="{{ url }}" rel="noopener">{{ t(key) }}</a>{% endfor %}
+    {% if extra.pdf_url %} · <a href="{{ extra.pdf_url }}" rel="noopener">{{ t('bill.link.full_pdf') }}</a>{% endif %}
   </dd>
+  <dt>{{ t('bill.source') }}</dt>
+  <dd><a href="https://www.chd.lu" rel="noopener">{{ t('bill.source.chd') }}</a></dd>
 </dl>
 
 {% if bill.summary %}
@@ -23,9 +27,23 @@
 <p class="prose">{{ bill.summary }}</p>
 {% endif %}
 
+{% if extra.documents %}
+<h2>{{ t('bill.documents') }}</h2>
+<table class="narrow">
+  <tbody>
+    {% for doc in extra.documents %}
+    <tr>
+      <td class="nowrap">{{ doc.date }}</td>
+      <td><a href="{{ doc.url }}" rel="noopener">{{ doc.label }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
 {% if scores %}
 <h2>{{ t('bill.scores') }}</h2>
-<table>
+<table class="narrow">
   <thead>
     <tr>
       <th scope="col">{{ t('bill.scores.profile') }}</th>
@@ -81,5 +99,4 @@
 </table>
 {% endif %}
 
-<p class="attribution"><a href="https://www.chd.lu" rel="noopener">{{ t('footer.source') }}</a></p>
 {% endblock %}

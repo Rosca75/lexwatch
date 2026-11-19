@@ -121,7 +121,7 @@
   "admin.state": "Status",
   "admin.state.bills": "Bills",
   "admin.state.pending": "Waiting for scoring",
-  "admin.state.unscored": "Unscored (retried next run)",
+  "admin.state.unscored": "Unscored",
   "admin.state.stale": "Scores from an older model",
   "admin.state.rescoring": "Profiles being rescored",
   "admin.state.units": "Billed units this month",
@@ -156,11 +156,15 @@
   "admin.export": "CSV export",
   "admin.export.bills": "Bills (bills.csv)",
   "admin.export.matches": "Matches (matches.csv)",
-  "auth.login.title": "Sign in",
   "error.forbidden": "Access denied.",
   "error.not_found": "Page not found.",
   "error.generic": "Something went wrong.",
   "error.back": "Back to bills",
   "error.csrf": "Your session expired. Reload the page and try again.",
-  "digest.subject": "lexwatch: {profile} – {count} new or changed bill(s)"
+  "admin.state.unscored.help": "Scoring failed for these bills; they are retried on the next run.",
+  "bill.source": "Source",
+  "bill.source.chd": "Chambre des Députés du Grand-Duché de Luxembourg",
+  "bill.committee": "Committee",
+  "bill.rapporteur": "Rapporteur",
+  "bill.documents": "Documents"
 }

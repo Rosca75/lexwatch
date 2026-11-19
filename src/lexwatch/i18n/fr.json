@@ -121,7 +121,7 @@
   "admin.state": "État",
   "admin.state.bills": "Projets de loi",
   "admin.state.pending": "En attente d’évaluation",
-  "admin.state.unscored": "Non évalués (nouvel essai au prochain passage)",
+  "admin.state.unscored": "Non évalués",
   "admin.state.stale": "Scores d’un ancien modèle",
   "admin.state.rescoring": "Profils en réévaluation",
   "admin.state.units": "Unités facturées ce mois",
@@ -156,11 +156,15 @@
   "admin.export": "Export CSV",
   "admin.export.bills": "Projets de loi (bills.csv)",
   "admin.export.matches": "Correspondances (matches.csv)",
-  "auth.login.title": "Connexion",
   "error.forbidden": "Accès refusé.",
   "error.not_found": "Page introuvable.",
   "error.generic": "Une erreur est survenue.",
   "error.back": "Retour aux projets de loi",
   "error.csrf": "La session a expiré. Rechargez la page et réessayez.",
-  "digest.subject": "lexwatch : {profile} – {count} projet(s) nouveau(x) ou modifié(s)"
+  "admin.state.unscored.help": "Le service d’évaluation a échoué pour ces projets ; nouvel essai au prochain passage.",
+  "bill.source": "Source",
+  "bill.source.chd": "Chambre des Députés du Grand-Duché de Luxembourg",
+  "bill.committee": "Commission",
+  "bill.rapporteur": "Rapporteur",
+  "bill.documents": "Documents"
 }

@@ -155,16 +155,31 @@ def bills_index(
     return render(request, template, context, headers={"Vary": "HX-Request, HX-Target"})
 
 
-def extra_links(bill: Bill) -> list[tuple[str, str]]:
-    """(i18n key, url) pairs from ``bill.extra`` when ingestion stores it (optional)."""
-    extra = getattr(bill, "extra", None)
+def _https(value: object) -> str | None:
+    return value if isinstance(value, str) and value.startswith("https://") else None
+
+
+def bill_extra(bill: Bill) -> dict[str, Any]:
+    """Display data from ``bill.extra`` (ingestion; optional until the column exists)."""
+    extra = getattr(bill, "extra", None) or {}
     if not isinstance(extra, dict):
-        return []
-    for key in ("full_pdf_url", "dossier_pdf_url"):
-        url = extra.get(key)
-        if isinstance(url, str) and url.startswith("https://"):
-            return [("bill.link.full_pdf", url)]
-    return []
+        extra = {}
+    documents = []
+    for doc in extra.get("documents") or []:
+        if isinstance(doc, dict) and _https(doc.get("url")):
+            documents.append(
+                {
+                    "label": str(doc.get("label") or doc["url"]),
+                    "date": str(doc.get("date") or ""),
+                    "url": doc["url"],
+                }
+            )
+    return {
+        "committee": str(extra.get("committee") or "") or None,
+        "rapporteur": str(extra.get("rapporteur") or "") or None,
+        "pdf_url": _https(extra.get("dossier_pdf_url")),
+        "documents": documents,
+    }
 
 
 @router.get("/bills/{number}")
@@ -227,7 +242,7 @@ def bill_detail(
             "bill": bill,
             "history": history,
             "scores": scores,
-            "extra_links": extra_links(bill),
+            "extra": bill_extra(bill),
             "dossier_url": bill.dossier_url or f"https://www.chd.lu/fr/dossier/{bill.number}",
         },
     )

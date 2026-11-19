@@ -83,9 +83,7 @@ def test_search_full_text_and_number(client, data):
 
 
 def test_htmx_request_returns_fragment(client, data):
-    response = client.get(
-        "/?all=1&q=route", headers={"HX-Request": "true", "HX-Target": "results"}
-    )
+    response = client.get("/?all=1&q=route", headers={"HX-Request": "true", "HX-Target": "results"})
     assert response.status_code == 200
     assert "<html" not in response.text
     assert _rows(response.text) == ["8200"]
@@ -165,3 +163,22 @@ def test_foreign_profile_owner_data_not_leaked_in_select(user_client, db):
     stranger = other_user(db)
     make_profile(db, stranger, "Secret profile")
     assert "Secret profile" not in user_client.get("/").text
+
+
+def test_bill_detail_shows_extra_when_present(client, db):
+    bill = make_bill(db, "8700")
+    # Plain attribute until ingestion's bills.extra column is merged; same shape either way.
+    bill.extra = {
+        "committee": "Commission des Finances",
+        "rapporteur": "Jane Doe",
+        "dossier_pdf_url": "https://wdocs-pub.chd.lu/docs/compilation/docpa/pdf/8700_Dossier_Complet.pdf",
+        "documents": [
+            {"label": "Dépôt", "date": "2025-01-15", "url": "https://wdocs-pub.chd.lu/x.pdf"},
+            {"label": "Bad", "date": "", "url": "javascript:alert(1)"},
+        ],
+    }
+    html = client.get("/bills/8700").text
+    assert "Commission des Finances" in html and "Jane Doe" in html
+    assert "8700_Dossier_Complet.pdf" in html and "Dossier complet (PDF)" in html
+    assert 'href="https://wdocs-pub.chd.lu/x.pdf"' in html and "2025-01-15" in html
+    assert "javascript:" not in html
