@@ -21,6 +21,7 @@ from lexwatch.scoring.foundry import FoundryScorer
 from lexwatch.scoring.service import (
     clear_preview_cache,
     compute_matches,
+    invalidate_rule_scores,
     is_match,
     preview_matches,
     profile_score,
@@ -197,12 +198,6 @@ def test_is_match_none_never_matches():
     assert is_match(None, 0.0) is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: identical rule scores equal to the threshold can average to just below it "
-    "(float sum: 3 x 0.173 / 3 = 0.17299999999999996), so the bill does not match although "
-    "its profile score is exactly the threshold",
-)
 def test_identical_scores_at_threshold_match():
     assert is_match(profile_score([0.173, 0.173, 0.173]), 0.173)
 
@@ -460,12 +455,6 @@ def test_rescore_profile_scores_a_new_rule_for_all_bills(db, owner):
     assert all(m.profile_score == pytest.approx(0.6) for m in matches(db, p).values())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: editing a rule's text in place keeps its old rule_scores (same rule id, same "
-    "model), so rescore_profile (as called by the worker, without force) sends no request and "
-    "matches keep the old rule's scores; spec 5 requires rescoring when rules change",
-)
 def test_rule_text_change_in_place_is_rescored(db, owner):
     bill(db, "1401")
     p = profile(db, owner, [R_AML])
@@ -475,6 +464,7 @@ def test_rule_text_change_in_place_is_rescored(db, owner):
     p.rules[0].text = R_CULT
     p.rescore_status = "pending"
     db.flush()
+    assert invalidate_rule_scores(db, p.rules[0].id) == 1  # what the web stream does on edit
     up = Foundry({(R_CULT, "1401"): 0.95})
     rescore_profile(db, foundry(up), p.id)  # what jobs.worker.tick does
     assert up.queries() == [R_CULT]
@@ -641,7 +631,6 @@ FLOAT_BUG = (
 )
 
 
-@pytest.mark.xfail(strict=True, reason=FLOAT_BUG)
 def test_preview_mean_exactly_at_default_threshold_matches(db, owner):
     bill(db, "1963")
     up = Foundry({(R_AML, "1963"): 0.6, (R_TER, "1963"): 0.3})
@@ -649,7 +638,6 @@ def test_preview_mean_exactly_at_default_threshold_matches(db, owner):
     assert rows[0].matched is True
 
 
-@pytest.mark.xfail(strict=True, reason=FLOAT_BUG)
 def test_stored_mean_exactly_at_threshold_matches(db, owner):
     bill(db, "1964")
     p = profile(db, owner, [R_AML, R_TER], threshold=0.45)

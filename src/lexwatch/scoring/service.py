@@ -46,6 +46,10 @@ from lexwatch.scoring.text import bill_text
 log = logging.getLogger(__name__)
 
 PREVIEW_CACHE_SIZE = 4096
+# Profile scores are rounded before the threshold comparison (and stored rounded) so that a
+# mean equal to the threshold in decimal is not lost to float error: (0.6 + 0.3) / 2 is
+# 0.44999999999999996 in binary floating point.
+SCORE_DECIMALS = 6
 _IN_CHUNK = 1000  # bound the size of IN (...) lists and multi-row inserts
 
 
@@ -76,10 +80,10 @@ class PreviewRow:
 
 
 def profile_score(rule_scores: list[float]) -> float | None:
-    """Plain average of rule scores; ``None`` when there are no rules."""
+    """Plain average of rule scores rounded to 6 decimals; ``None`` when there are no rules."""
     if not rule_scores:
         return None
-    return sum(rule_scores) / len(rule_scores)
+    return round(sum(rule_scores) / len(rule_scores), SCORE_DECIMALS)
 
 
 def is_match(score: float | None, threshold: float) -> bool:
@@ -414,16 +418,18 @@ def compute_matches(
         func.count(func.distinct(RuleScore.rule_id)) == len(rule_ids)
     )
     now = _now()
-    rows = [
-        {
-            "profile_id": profile.id,
-            "bill_number": number,
-            "profile_score": float(avg),
-            "matched": is_match(float(avg), threshold),
-            "computed_at": now,
-        }
-        for number, avg in session.execute(stmt)
-    ]
+    rows = []
+    for number, avg in session.execute(stmt):
+        score = round(float(avg), SCORE_DECIMALS)
+        rows.append(
+            {
+                "profile_id": profile.id,
+                "bill_number": number,
+                "profile_score": score,
+                "matched": is_match(score, threshold),
+                "computed_at": now,
+            }
+        )
     table = Match.__table__
     for chunk in _chunks(rows, _IN_CHUNK):
         ins = pg_insert(Match).values(list(chunk))
@@ -469,6 +475,19 @@ def recompute_profile_matches(
     return compute_matches(
         session, profile, default_threshold_for(settings), model=model_name_for(settings)
     )
+
+
+def invalidate_rule_scores(session: Session, rule_id: int) -> int:
+    """Delete a rule's stored scores; call it when the rule's text is edited in place.
+
+    Scores belong to the rule text, not the rule id. Without stored scores the rule has no
+    current-model score for any bill, so the next ``rescore_profile`` (worker) or
+    ``score_pending_bills`` (daily run) rescores it. Returns the number of rows deleted.
+    The profile's match rows are kept until that rescore recomputes them.
+    """
+    result = session.execute(delete(RuleScore).where(RuleScore.rule_id == rule_id))
+    session.flush()
+    return int(result.rowcount or 0)
 
 
 def stale_score_count(session: Session, model_name: str) -> int:
