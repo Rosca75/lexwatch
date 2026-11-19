@@ -77,8 +77,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             from fastapi.exception_handlers import http_exception_handler
 
             return await http_exception_handler(request, exc)
+        # ``detail`` is a short code for known errors (CSRF raises ``detail="csrf"``); the
+        # template maps it to an i18n message (``error.csrf``) and never prints it raw.
+        detail = exc.detail if isinstance(exc.detail, str) else None
         return render(
-            request, "error.html", {"status_code": exc.status_code}, status_code=exc.status_code
+            request,
+            "error.html",
+            {"status_code": exc.status_code, "detail": detail},
+            status_code=exc.status_code,
+            headers=getattr(exc, "headers", None),
         )
 
     return app
