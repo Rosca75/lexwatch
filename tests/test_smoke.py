@@ -125,3 +125,11 @@ def test_cli_migrate_is_idempotent(engine, settings):
     from lexwatch.cli import cmd_migrate
 
     assert cmd_migrate(settings, argparse.Namespace(revision="head")) == 0
+
+
+def test_fake_scorer_refused_in_production(settings):
+    prod = replace(settings, env="production", secret_key="x" * 32, dev_auth=False)
+    with pytest.raises(ValueError, match="SCORER=fake"):
+        replace(prod, scorer="fake").validate()
+    replace(prod, scorer="foundry").validate()
+    replace(prod, scorer="local").validate()

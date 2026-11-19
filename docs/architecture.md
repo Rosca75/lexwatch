@@ -111,7 +111,7 @@ streams add one in parallel.
 class Settings: ...                 # every field maps to one env var, documented in .env.example
     @classmethod
     def from_env(cls, environ=None) -> Settings
-    def validate(self) -> None        # ValueError: DEV_AUTH or default SECRET_KEY in production, bad SCORER
+    def validate(self) -> None        # ValueError: DEV_AUTH, SCORER=fake or default SECRET_KEY in production, bad SCORER
     is_production: bool; effective_oidc_redirect_uri: str
 def get_settings() -> Settings       # cached; tests build Settings directly (tests/helpers.py)
 ```

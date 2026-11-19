@@ -143,7 +143,7 @@ lists them all with comments. An empty value means "use the default".
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SCORER` | `foundry` | `foundry`, `local` or `fake` (development only). |
+| `SCORER` | `foundry` | `foundry`, `local` or `fake` (development only, refused when `ENV=production`). |
 | `DEFAULT_THRESHOLD` | scorer default | Threshold for profiles without their own. Empty: Rerank 5 Pro 0.5, Rerank 5 Fast 0.45, Rerank 4 0.5 (uncalibrated), local 0.05, fake 0.3. |
 | `SCORING_MAX_CHARS` | `4000` | Maximum characters of bill text sent to the scorer. |
 | `FOUNDRY_ENDPOINT` | | Rerank URL, see [Foundry setup](#foundry-setup). |
