@@ -32,6 +32,7 @@ lexwatch = "lexwatch.cli:main"
 
 [dependency-groups]
 dev = [
+    "numpy>=1.26",  # mocked local-scorer tests only; not a runtime dependency
     "pytest>=8",
     "pytest-cov>=5",
     "ruff>=0.6",
@@ -71,5 +72,6 @@ testpaths = ["tests"]
 addopts = "-ra"
 filterwarnings = [
     "ignore::DeprecationWarning:authlib.*",
+    "ignore::authlib.deprecate.AuthlibDeprecationWarning",
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
