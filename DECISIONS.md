@@ -189,3 +189,57 @@ Format: date — decision. *Reason.* Alternatives considered.
   relevant (financial-sector amendments, covered bonds, deposit guarantee) with a few weak ones (AI Act, merger
   control); misses just below include the financial intelligence unit (0.028) and two Council of Europe conventions —
   rules that name these topics explicitly would catch them. Conclusion: sensible.
+- **2026-11-19 — Scores shown with three decimals** everywhere (list, bill page, hover, preview, digest, thresholds),
+  so a bill at 0.028 is visibly below a 0.030 threshold.
+- **2026-11-19 — Clean shutdown.** SIGTERM stops the worker between scoring batches; finished batches are kept and the
+  run is marked "interrupted (worker stopping)". An interrupted first (bootstrap) run passes its "bootstrap" flag on
+  to the run that completes the initial scoring, so the first digest is never flooded.
+- **2026-11-19 — Final clean-checkout check (DoD 1).** A fresh clone with only `.env` filled (plus, in this build
+  sandbox, a compose override supplying the proxy CA as a build secret) started `db`, `app` and `worker`; `/health`
+  and `/ready` returned 200, the container runs as uid 10001, migrations reached head 0004 once, and
+  `ENV=production` with `DEV_AUTH=true` was refused with a single log line.
+
+## Final summary
+
+**What was built.** lexwatch, a FastAPI + Jinja + htmx app with a polling worker and PostgreSQL 16, run with
+`docker compose up` (`app`, `worker`, `db`; profile `local-scorer`). It:
+
+- ingests Luxembourg bills daily from data.public.lu (datasets 112 and 121 as the baseline, the daily plenary-votes
+  dataset 109 as the delta), with source precedence, a full status history, change detection by checksum and a
+  robots.txt gate for anything on chd.lu;
+- scores new and changed bills against user rules with Cohere Rerank on Microsoft Foundry (REST, API key or
+  Entra ID, retries, circuit breaker, billed-units tracking), or an optional local ONNX reranker; profile score is the
+  plain mean of rule scores, compared to a per-profile or default threshold; rescoring runs in the background;
+- shows bills, bill details with per-rule scores on hover, profile and rule management with a preview, and an admin
+  page (runs, progress, sources, monthly cost, Run now, Rescore all, CSV export), in French and English, in a
+  deliberately minimal style;
+- sends one HTML + text digest per profile per day through the client's SMTP relay;
+- authenticates with OIDC (Entra ID or Keycloak), maps roles from a configurable claim, uses signed HttpOnly
+  SameSite=Lax cookies and CSRF protection on every change.
+
+Quality: 1,310 automated tests (parsers on saved fixtures, merge/history, scoring with fake and recorded responses,
+auth guards, CSRF, digests, i18n coverage, UI rules), ruff clean, end-to-end runs in Docker Compose with real data.
+
+**Known limitations.**
+- The source data is stale: dataset 112 stops in July 2024 and 121 in April 2025. Newer bills appear only when they
+  are voted on, with a short title and no filing date, and status changes before a vote are invisible. chd.lu's
+  robots.txt forbids scraping the dossier pages.
+- Foundry was not reachable during the build: the endpoint route, the Entra token scope and the billed-units
+  pass-through are implemented from documentation and community samples and covered by recorded responses only.
+  Run `tests/scoring/test_foundry_live.py` once with real credentials. Default thresholds for Foundry follow
+  Cohere's guidance and are not calibrated on this data.
+- Rerank v5 is in preview on Foundry and retires on 2027-02-12; v4.0 on 2027-09-14.
+- The local scorer needs about 0.15 s per (rule, bill) pair on 4 CPUs: a first full scoring of ~4,000 bills takes
+  about 10 minutes per rule.
+- The plain average of rule scores dilutes bills that match only one rule of a multi-topic profile; put unrelated
+  topics in separate profiles.
+- Sessions are stateless signed cookies: logout cannot revoke a copied cookie before it expires (12 h).
+
+**Recommended next steps.**
+1. Ask the Chambre (relations.publiques@chd.lu) to refresh datasets 112/121 daily, or for permission to fetch
+   dossier pages; then add the dossier adapter behind the existing robots gate.
+2. Deploy `Cohere-rerank-v5-fast` (or v4.0 GA if preview models are not allowed), run the live test, then calibrate
+   the threshold on a few dozen borderline bills and set `DEFAULT_THRESHOLD`.
+3. Put the follow-up of Foundry model retirements in the operations calendar (`docs/operations.md`).
+4. Consider the optional extensions noted above: LLM explanations for matches, and Legilux tracking after
+   publication.
