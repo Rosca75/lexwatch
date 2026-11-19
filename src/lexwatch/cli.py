@@ -37,15 +37,16 @@ MIGRATION_LOCK_ID = 7_431_001  # pg advisory lock: app and worker may both migra
 
 
 def cmd_migrate(settings: Settings, args: argparse.Namespace) -> int:
+    # Alembic logs several INFO lines per start (plugin setup at import, "Context impl",
+    # "Will assume transactional DDL", one per revision); keep its warnings only and log one
+    # line ourselves. Set before the first alembic import.
+    logging.getLogger("alembic").setLevel(logging.WARNING)
     from alembic import command
     from alembic.runtime.migration import MigrationContext
     from sqlalchemy import create_engine, text
 
     cfg = _alembic_config(settings)
     engine = create_engine(settings.database_url)
-    # Alembic logs several INFO lines per start ("Context impl", "Will assume transactional
-    # DDL", one per revision); keep its warnings only and log one line ourselves.
-    logging.getLogger("alembic").setLevel(logging.WARNING)
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT pg_advisory_lock(:id)"), {"id": MIGRATION_LOCK_ID})
