@@ -110,6 +110,8 @@ table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
 th, td { text-align: left; vertical-align: top; padding: 0.55rem 1.5rem 0.55rem 0; border-bottom: 1px solid var(--line); }
 th { font-weight: 600; border-bottom-color: var(--text); }
 th:last-child, td:last-child { padding-right: 0; }
+table.runs th, table.runs td { padding-right: 0.9rem; }
+table.runs th:last-child, table.runs td:last-child { padding-right: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 .scroll { overflow-x: auto; }
@@ -144,9 +146,10 @@ footer { margin: 5rem 0 2rem; padding-top: 1rem; border-top: 1px solid var(--lin
 /* Subtle htmx loading indicator: the region being refreshed fades a little. */
 .htmx-request { opacity: 0.55; transition: opacity 150ms ease-in; }
 
+@media (max-width: 64rem) {
+  table.runs th, table.runs td { padding-right: 0.6rem; }
+}
 @media (max-width: 48rem) {
   body { padding: 0 1rem; }
   .topbar-end { margin-left: 0; }
 }
-table.runs th, table.runs td { padding-right: 0.9rem; }
-table.runs th:last-child, table.runs td:last-child { padding-right: 0; }
