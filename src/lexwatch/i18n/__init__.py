@@ -64,3 +64,33 @@ def t(key: str, lang: str | None = None, **fmt: object) -> str:
         except (KeyError, IndexError, ValueError):
             return text
     return text
+
+
+def format_score(value: float | None, lang: str | None) -> str:
+    """Two decimals with the language's decimal separator (``0,42`` in French)."""
+    if value is None:
+        return ""
+    text = f"{value:.2f}"
+    return text.replace(".", ",") if normalize_lang(lang) == "fr" else text
+
+
+def bill_label(number: str, bill_type: str | None, lang: str | None) -> str:
+    """ "Projet de loi n° 8627" / "Government bill 8627": the bill heading, also used as the
+    display title of a bill without a title."""
+    type_label = t(f"bill.type.{bill_type}", lang) if bill_type else ""
+    if not bill_type or type_label == f"bill.type.{bill_type}":
+        type_label = t("bill.heading.default", lang)
+    return t("bill.heading", lang, type=type_label, number=number)
+
+
+def bill_display_title(
+    title: str | None, number: str, bill_type: str | None, lang: str | None
+) -> str:
+    """The bill's title, or ``bill_label`` when the title is blank."""
+    return title.strip() if title and title.strip() else bill_label(number, bill_type, lang)
+
+
+def format_int(value: int, lang: str | None) -> str:
+    """Thousands separated: ``12 039`` (no-break space) in French, ``12,039`` in English."""
+    text = f"{int(value):,}"
+    return text.replace(",", "\u00a0") if normalize_lang(lang) == "fr" else text

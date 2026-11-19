@@ -8,12 +8,24 @@ of a profile when its match is ``matched`` and, within the window ``(since, now]
   for example after new rules or a lower threshold.
 
 ``since`` is ``profile.last_digest_at``. For a profile that never got a digest
-(``last_digest_at IS NULL``) the window is the last 24 hours and only bill changes count, not
-match computations: otherwise the first digest after creating a profile would list every bill
-it matches (they are all in the app already). ``last_digest_at`` is set to ``now`` only after a
-successful send, so nothing is lost when a send fails or no digest was due. A profile gets at
-most one digest per calendar day in ``APP_TIMEZONE``: a second run on the same day (e.g. "Run
-now") skips it, and its later changes go out the next day.
+(``last_digest_at IS NULL``) the window is the last 24 hours, starting no earlier than the
+profile's creation, and only bill changes count, not match computations: otherwise the first
+digest after creating a profile would list every bill it matches (they are all in the app
+already).
+
+Bootstrap runs: the first ingestion into an empty ``bills`` table records
+``runs.details["bootstrap"] = true`` (``ingest.pipeline``). Timestamps that fall inside such a
+run (``started_at`` to ``finished_at``, or now while it is running) are ignored, so a fresh
+install does not report every historical bill as new; only later changes count.
+
+Bills are listed newest first (bill number descending, ``models.bill_recency_order``). Scores
+use the owner's language decimal separator; titles are cut to ``TITLE_MAX`` characters, and a
+bill without a title shows "Projet de loi n° 8627".
+
+``last_digest_at`` is set to ``now`` only after a successful send, so nothing is lost when a
+send fails or no digest was due. A profile gets at most one digest per calendar day in
+``APP_TIMEZONE``: a second run on the same day (e.g. "Run now") skips it, and its later
+changes go out the next day.
 
 Rendered from ``web/templates/email/digest.html`` and ``digest.txt`` in the profile owner's
 language, with absolute links built from ``settings.base_url``. Recipients come from
@@ -36,14 +48,15 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from lexwatch.config import Settings, get_settings
-from lexwatch.i18n import normalize_lang, t
-from lexwatch.models import Bill, Match, Profile
+from lexwatch.i18n import bill_display_title, format_score, normalize_lang, t
+from lexwatch.models import Bill, Match, Profile, Run, bill_recency_order
 from lexwatch.notify import mailer
 
 log = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "web" / "templates"
 FIRST_DIGEST_WINDOW = timedelta(hours=24)
+TITLE_MAX = 200  # characters of a title in the digest; longer ones end with "…"
 SOURCE_URL = "https://www.chd.lu"
 # App paths linked from the email (stream 3 routes).
 BILL_PATH = "/bills/{number}"
@@ -157,18 +170,52 @@ def already_sent_today(profile: Profile, now: datetime, settings: Settings) -> b
     return profile.last_digest_at.astimezone(tz).date() == now.astimezone(tz).date()
 
 
-def window_start(since: datetime | None, now: datetime) -> datetime:
-    return since if since is not None else now - FIRST_DIGEST_WINDOW
+def window_start(
+    since: datetime | None, now: datetime, created_at: datetime | None = None
+) -> datetime:
+    """``since``, or for a first digest the last 24 hours, not before the profile's creation."""
+    if since is not None:
+        return since
+    start = now - FIRST_DIGEST_WINDOW
+    return max(start, created_at) if created_at is not None else start
+
+
+def bootstrap_windows(session: Session, now: datetime) -> list[tuple[datetime, datetime]]:
+    """``(started_at, finished_at or now)`` of runs whose ingestion bootstrapped the bills."""
+    rows = session.execute(
+        select(Run.started_at, Run.finished_at).where(
+            Run.details.contains({"bootstrap": True}), Run.started_at.is_not(None)
+        )
+    )
+    return [(start, end or now) for start, end in rows]
+
+
+def _in(value: datetime, windows: list[tuple[datetime, datetime]]) -> bool:
+    return any(start <= value <= end for start, end in windows)
+
+
+def truncate_title(title: str, limit: int = TITLE_MAX) -> str:
+    title = " ".join(title.split())
+    if len(title) <= limit:
+        return title
+    return title[: limit - 1].rstrip() + "…"
 
 
 def digest_rows(
     session: Session, profile: Profile, since: datetime | None, now: datetime
 ) -> list[tuple[Bill, Match]]:
-    """Matched bills of ``profile`` that are new or changed in ``(since, now]``."""
-    start = window_start(since, now)
+    """Matched bills of ``profile`` that are new or changed in ``(since, now]``.
+
+    Timestamps inside a bootstrap run (see the module docstring) do not count.
+    """
+    start = window_start(since, now, profile.created_at)
+    windows = bootstrap_windows(session, now)
 
     def in_window(column: Any) -> Any:
-        return and_(column > start, column <= now)
+        condition = and_(column > start, column <= now)
+        for w_start, w_end in windows:
+            condition = and_(condition, ~column.between(w_start, w_end))
+        return condition
 
     changed = [in_window(Bill.first_seen_at), in_window(Bill.last_changed_at)]
     if since is not None:
@@ -177,7 +224,7 @@ def digest_rows(
         select(Bill, Match)
         .join(Match, Match.bill_number == Bill.number)
         .where(Match.profile_id == profile.id, Match.matched.is_(True), or_(*changed))
-        .order_by(Bill.last_changed_at.desc(), Bill.number.desc())
+        .order_by(*bill_recency_order())
     )
     return [(bill, match) for bill, match in session.execute(stmt).all()]
 
@@ -200,14 +247,16 @@ def build_digest(
         return None
     base = settings.base_url.rstrip("/")
     tr = partial(t, lang=lang)
+    start = window_start(since, now, profile.created_at)
+    windows = bootstrap_windows(session, now)
     bills: list[dict[str, Any]] = [
         {
             "number": bill.number,
-            "title": bill.title or "",
+            "title": truncate_title(bill_display_title(bill.title, bill.number, bill.type, lang)),
             "status": status_label(bill.status, lang),
-            "score": f"{match.profile_score:.2f}",
+            "score": format_score(match.profile_score, lang),
             "url": base + BILL_PATH.format(number=bill.number),
-            "is_new": bill.first_seen_at > window_start(since, now),
+            "is_new": bill.first_seen_at > start and not _in(bill.first_seen_at, windows),
         }
         for bill, match in rows
     ]
