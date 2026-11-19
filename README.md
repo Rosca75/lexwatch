@@ -144,7 +144,7 @@ lists them all with comments. An empty value means "use the default".
 | Variable | Default | Meaning |
 |---|---|---|
 | `SCORER` | `foundry` | `foundry`, `local` or `fake` (development only, refused when `ENV=production`). |
-| `DEFAULT_THRESHOLD` | scorer default | Threshold for profiles without their own. Empty: Rerank 5 Pro 0.5, Rerank 5 Fast 0.45, Rerank 4 0.5 (uncalibrated), local 0.05, fake 0.3. |
+| `DEFAULT_THRESHOLD` | scorer default | Threshold for profiles without their own. Empty: Rerank 5 Pro 0.5, Rerank 5 Fast 0.45, Rerank 4 0.5 (uncalibrated), local 0.03, fake 0.3. |
 | `SCORING_MAX_CHARS` | `4000` | Maximum characters of bill text sent to the scorer. |
 | `FOUNDRY_ENDPOINT` | | Rerank URL, see [Foundry setup](#foundry-setup). |
 | `FOUNDRY_MODEL` | `Cohere-rerank-v5-fast` | Deployment name, sent as `model`. Stored with every score. |
@@ -164,6 +164,7 @@ lists them all with comments. An empty value means "use the default".
 | `LOCAL_MODEL_FILE` | `onnx/model_int8.onnx` | ONNX file (int8, about 571 MB). |
 | `LOCAL_MAX_LENGTH` | `512` | Tokens per (rule, bill) pair. |
 | `LOCAL_BATCH_SIZE` | `8` | Pairs per ONNX batch. |
+| `LOCAL_THREADS` | `0` | onnxruntime intra-op threads; `0` uses every CPU available to the process. |
 
 ### Email
 
@@ -287,7 +288,7 @@ CPU. It is not in the default image.
 3. Rebuild and start: `docker compose up -d --build`. `/ready` reports the scorer as ready once
    the model and tokenizer files are present.
 
-Its scores are on another scale than Cohere's: the default threshold is **0.05** (calibrated on
+Its scores are on another scale than Cohere's: the default threshold is **0.03** (calibrated on
 real bills), not 0.5. Profiles with their own threshold must be re-checked after switching.
 Switching scorer rescores every bill (see [operations](docs/operations.md#switching-model-versions-and-rescoring)).
 A full rescore on CPU can take hours.
@@ -398,6 +399,66 @@ the image behind such a proxy, pass the bundle as a build secret (it is not stor
 ```sh
 docker build --secret id=extra_ca,src=/path/to/ca-bundle.crt -t lexwatch:latest .
 ```
+
+With Docker Compose, put both in a `docker-compose.override.yml` next to
+`docker-compose.yml` (Compose reads it automatically). The build secret is used only while
+`uv` downloads packages; the runtime mount is what the app uses:
+
+```yaml
+# docker-compose.override.yml: build and run behind a TLS-intercepting proxy
+x-proxy-ca: &proxy-ca
+  build:
+    context: .
+    args:
+      INSTALL_LOCAL_SCORER: ${INSTALL_LOCAL_SCORER:-0}
+    secrets: [extra_ca]
+  volumes:
+    - models:/models:ro
+    - /etc/ssl/corp-ca-bundle.crt:/etc/ssl/certs/corp-ca-bundle.crt:ro
+  environment:
+    SSL_CERT_FILE: /etc/ssl/certs/corp-ca-bundle.crt
+    REQUESTS_CA_BUNDLE: /etc/ssl/certs/corp-ca-bundle.crt
+
+services:
+  app: *proxy-ca
+  worker: *proxy-ca
+
+secrets:
+  extra_ca:
+    file: /etc/ssl/corp-ca-bundle.crt
+```
+
+The bundle must hold the proxy's CA **and** the public roots (for example the system bundle
+with the proxy CA appended): `SSL_CERT_FILE` replaces the default trust store, it does not add
+to it. For `model-download` (local scorer), add the same `build.secrets`, volume and
+environment entries to that service, keeping its `models:/models` volume writable. Compose
+merges `volumes` by mount path, so list `models` again as above.
+
+Two traps:
+
+- **A proxy on the host's loopback is not reachable from containers.** `127.0.0.1` inside a
+  container is the container itself. Make the proxy listen on an interface the containers can
+  reach (the Docker bridge, for example `172.17.0.1`, or `0.0.0.0` behind a firewall), and
+  point the containers at the host by name:
+
+  ```yaml
+  services:
+    app:
+      extra_hosts: ["host.docker.internal:host-gateway"]
+    worker:
+      extra_hosts: ["host.docker.internal:host-gateway"]
+  ```
+
+  with `HTTPS_PROXY=http://host.docker.internal:3128` in `.env`. The build's `RUN` steps
+  cannot reach the host's loopback either: give them a reachable address with
+  `docker compose build --build-arg HTTPS_PROXY=http://172.17.0.1:3128` (a predefined build
+  argument, not stored in the image) or with Docker's client proxy settings
+  (`~/.docker/config.json`, `proxies`).
+- **The containers read their settings from `./.env`** (`env_file` in `docker-compose.yml`).
+  `docker compose --env-file other.env` changes only the `${...}` interpolation in the
+  compose file (for example `POSTGRES_PASSWORD`, `APP_PORT`), not the variables the app sees.
+  Put `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE` and the rest in `./.env`, or in
+  `environment:` in an override file.
 
 ## Health endpoints
 
