@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from lexwatch.db import get_db
 from lexwatch.i18n import t
 from lexwatch.models import SEARCH_CONFIG, Bill, BillEvent, Match, Profile, Rule, RuleScore, User
+from lexwatch.scoring.factory import model_name_for
 from lexwatch.web.deps import get_lang, require_user
 from lexwatch.web.templating import render
 
@@ -190,6 +191,13 @@ def bill_extra(bill: Bill) -> dict[str, Any]:
     }
 
 
+def _current_model(request: Request) -> str | None:
+    try:
+        return model_name_for(request.app.state.settings)
+    except Exception:
+        return None
+
+
 @router.get("/bills/{number}")
 def bill_detail(
     number: str, request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)
@@ -214,16 +222,30 @@ def bill_detail(
     ]
 
     profiles = visible_profiles(db, user)
-    profile_ids = [p.id for p in profiles]
     matches = {
         m.profile_id: m
         for m in db.scalars(
-            select(Match).where(Match.bill_number == number, Match.profile_id.in_(profile_ids))
+            select(Match).where(
+                Match.bill_number == number, Match.profile_id.in_([p.id for p in profiles])
+            )
         )
     }
+    if user.is_admin:
+        # Admins see every profile elsewhere; here only their own and those the bill matched.
+        profiles = [
+            p
+            for p in profiles
+            if p.owner_id == user.id or (p.id in matches and matches[p.id].matched)
+        ]
+    profile_ids = [p.id for p in profiles]
+    # Per-rule hover: only scores of the configured model; another model's score is stale.
+    score_join = and_(RuleScore.rule_id == Rule.id, RuleScore.bill_number == number)
+    model = _current_model(request)
+    if model is not None:
+        score_join = and_(score_join, RuleScore.model == model)
     rule_rows = db.execute(
         select(Rule, RuleScore.score)
-        .outerjoin(RuleScore, and_(RuleScore.rule_id == Rule.id, RuleScore.bill_number == number))
+        .outerjoin(RuleScore, score_join)
         .where(Rule.profile_id.in_(profile_ids))
         .order_by(Rule.profile_id, Rule.position, Rule.id)
     ).all()

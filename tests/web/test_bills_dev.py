@@ -192,3 +192,30 @@ def test_digest_links_work(user_client, db):
     page = user_client.get(f"/?profile={mine.id}")
     assert page.status_code == 200 and _rows(page.text) == ["8801"]
     assert user_client.get("/bills/8801").status_code == 200
+
+
+def test_bill_detail_hover_hides_scores_of_another_model(client, db, data):
+    from sqlalchemy import update
+
+    from lexwatch.models import RuleScore
+
+    db.execute(update(RuleScore).where(RuleScore.bill_number == "8100").values(model="old-model"))
+    db.flush()
+    html = client.get("/bills/8100").text
+    assert "blanchiment de capitaux : –" in html
+    assert "blanchiment de capitaux : 0,81" not in html
+
+
+def test_bill_detail_admin_sees_own_and_matched_profiles_only(client, db, data):
+    someone = other_user(db)
+    matched = make_profile(db, someone, "Matched elsewhere")
+    unmatched = make_profile(db, someone, "Not matched elsewhere")
+    make_match(db, matched, data["bills"][0], 0.9)
+    make_match(db, unmatched, data["bills"][0], 0.1)
+    html = client.get("/bills/8100").text
+    assert "AML" in html  # the admin's own profile
+    assert "Matched elsewhere" in html
+    assert "Not matched elsewhere" not in html
+    # Own profiles are listed even without a match.
+    html = client.get("/bills/8200").text
+    assert "AML" in html and "Matched elsewhere" not in html
