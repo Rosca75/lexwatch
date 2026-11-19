@@ -160,7 +160,7 @@ def test_render_html_and_text_fr(db, scenario):
     for forbidden in ("<img", "<style", "<script", "<link"):
         assert forbidden not in html
     assert "https://lexwatch.example.lu/bills/8410" in text
-    assert "Statut: Avis du Conseil d'État | Score: 0.75" in text
+    assert "Statut : Avis du Conseil d'État | Score : 0.75" in text
     assert "Source : Chambre des Députés" in text
     assert "<td" not in text
 

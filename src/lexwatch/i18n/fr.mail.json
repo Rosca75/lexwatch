@@ -7,5 +7,7 @@
   "email.digest.col.score": "Score",
   "email.digest.profile_link": "Voir tous les projets du profil « {profile} »",
   "email.digest.reason": "Vous recevez ce message parce que votre adresse figure parmi les destinataires du profil « {profile} ».",
-  "email.source": "Source : Chambre des Députés du Grand-Duché de Luxembourg"
+  "email.source": "Source : Chambre des Députés du Grand-Duché de Luxembourg",
+  "email.digest.text.status_score": "Statut : {status} | Score : {score}",
+  "email.digest.text.score": "Score : {score}"
 }

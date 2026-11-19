@@ -4,14 +4,14 @@
 {% for bill in bills %}
 {{ bill.number }}  {{ bill.title }}
 {% if bill.status %}
-    {{ t('email.digest.col.status') }}: {{ bill.status }} | {{ t('email.digest.col.score') }}: {{ bill.score }}
+    {{ t('email.digest.text.status_score', status=bill.status, score=bill.score) }}
 {% else %}
-    {{ t('email.digest.col.score') }}: {{ bill.score }}
+    {{ t('email.digest.text.score', score=bill.score) }}
 {% endif %}
     {{ bill.url }}
 
 {% endfor %}
-{{ t('email.digest.profile_link', profile=profile_name) }}:
+{{ t('email.digest.profile_link', profile=profile_name) }}
 {{ profile_url }}
 
 -- 
