@@ -1,0 +1,33 @@
+{
+  "id": "3b8f6c1e-9d2a-4f57-a0c4-7e1d5b29f8a6",
+  "results": [
+    {
+      "index": 2,
+      "relevance_score": 0.91734606
+    },
+    {
+      "index": 0,
+      "relevance_score": 0.6382451
+    },
+    {
+      "index": 4,
+      "relevance_score": 0.21907842
+    },
+    {
+      "index": 3,
+      "relevance_score": 0.034817535
+    },
+    {
+      "index": 1,
+      "relevance_score": 0.0062190853
+    }
+  ],
+  "meta": {
+    "api_version": {
+      "version": "2"
+    },
+    "billed_units": {
+      "input_tokens": 412
+    }
+  }
+}

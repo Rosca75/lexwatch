@@ -1,0 +1,21 @@
+{
+  "app.name": "lexwatch",
+  "nav.bills": "Bills",
+  "nav.rules": "Rules",
+  "nav.admin": "Admin",
+  "nav.logout": "Sign out",
+  "nav.login": "Sign in",
+  "nav.language": "Language",
+  "lang.fr": "Français",
+  "lang.en": "English",
+  "footer.source": "Source: Chambre des Députés du Grand-Duché de Luxembourg",
+  "bills.title": "Bills",
+  "bill.title": "Bill {number}",
+  "rules.title": "Rules",
+  "admin.title": "Admin",
+  "auth.login.title": "Sign in",
+  "error.forbidden": "Access denied.",
+  "error.not_found": "Page not found.",
+  "error.csrf": "Your session expired. Reload the page and try again.",
+  "digest.subject": "lexwatch: {profile} – {count} new or changed bill(s)"
+}

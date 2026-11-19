@@ -1,0 +1,21 @@
+{
+  "app.name": "lexwatch",
+  "nav.bills": "Projets de loi",
+  "nav.rules": "Règles",
+  "nav.admin": "Administration",
+  "nav.logout": "Se déconnecter",
+  "nav.login": "Se connecter",
+  "nav.language": "Langue",
+  "lang.fr": "Français",
+  "lang.en": "English",
+  "footer.source": "Source : Chambre des Députés du Grand-Duché de Luxembourg",
+  "bills.title": "Projets de loi",
+  "bill.title": "Projet de loi {number}",
+  "rules.title": "Règles",
+  "admin.title": "Administration",
+  "auth.login.title": "Connexion",
+  "error.forbidden": "Accès refusé.",
+  "error.not_found": "Page introuvable.",
+  "error.csrf": "La session a expiré. Rechargez la page et réessayez.",
+  "digest.subject": "lexwatch : {profile} – {count} projet(s) nouveau(x) ou modifié(s)"
+}
