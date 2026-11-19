@@ -117,7 +117,7 @@ class Settings:
 
     @property
     def is_production(self) -> bool:
-        return self.env == "production"
+        return self.env.strip().lower() == "production"
 
     @property
     def effective_oidc_redirect_uri(self) -> str:

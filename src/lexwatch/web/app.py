@@ -67,7 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def _not_authenticated(request: Request, exc: NotAuthenticated) -> Response:
         if request.headers.get("HX-Request"):
             return Response(status_code=401, headers={"HX-Redirect": "/login"})
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(getattr(exc, "login_url", None) or "/login", status_code=303)
 
     @app.exception_handler(HTTPException)
     async def _http_error(request: Request, exc: HTTPException) -> Response:
