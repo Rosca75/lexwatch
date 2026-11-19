@@ -34,12 +34,13 @@ log = logging.getLogger(__name__)
 
 TOKENIZER_FILE = "tokenizer.json"
 HF_BASE_URL = "https://huggingface.co"
-# Default profile threshold for this scorer when DEFAULT_THRESHOLD is not set. Calibrated on
-# the 250 most recent bills of dataset 121 (title + author line) against 4 French profiles of
-# 1 to 3 rules: the profile mean of unrelated bills stays below 0.02 (95th percentile 0.005 to
-# 0.02), while bills a reader would call relevant score 0.05 to 0.75. bge sigmoid scores are
-# very peaked, so the cut-off is far below Cohere Rerank 5's calibrated 0.5.
-LOCAL_DEFAULT_THRESHOLD = 0.05
+# Default profile threshold for this scorer when DEFAULT_THRESHOLD is not set. First
+# calibrated at 0.05 on the 250 most recent bills of dataset 121; an end-to-end run on all
+# 4,013 bills with 3 French profiles then showed non-matching bills up to a profile mean of
+# 0.013 to 0.028 (99th percentile), clearly relevant bills between 0.03 and 0.05 that 0.05
+# missed, and about 60% relevant bills in the 0.02 to 0.05 band. bge sigmoid scores are very
+# peaked, so the cut-off is far below Cohere Rerank 5's calibrated 0.5.
+LOCAL_DEFAULT_THRESHOLD = 0.03
 _XLMR_PAD_ID = 1
 
 
@@ -55,6 +56,14 @@ def model_label(settings: Settings) -> str:
     stem = Path(settings.local_model_file).stem  # model_int8
     variant = stem.removeprefix("model").lstrip("_") or "fp32"
     return f"{repo}-{variant}"
+
+
+def available_cpus() -> int:
+    """CPUs this process may run on (affinity mask, e.g. ``docker --cpuset-cpus``)."""
+    try:
+        return len(os.sched_getaffinity(0)) or 1
+    except (AttributeError, OSError):  # not on Linux
+        return os.cpu_count() or 1
 
 
 def _sigmoid(x: float) -> float:
@@ -115,8 +124,14 @@ class LocalScorer:
             raise ScoringError(
                 f"local model files missing ({', '.join(missing)}); run `lexwatch download-model`"
             )
+        # Errors only: onnxruntime otherwise prints warnings (and a telemetry notice on some
+        # platforms) straight to stderr, outside the JSON logs.
+        onnxruntime.set_default_logger_severity(3)
         options = onnxruntime.SessionOptions()
         options.log_severity_level = 3
+        threads = self.settings.local_threads or available_cpus()
+        if threads:
+            options.intra_op_num_threads = threads
         self._session = onnxruntime.InferenceSession(
             str(model_path), sess_options=options, providers=["CPUExecutionProvider"]
         )
@@ -134,10 +149,14 @@ class LocalScorer:
         except ImportError as exc:  # pragma: no cover - numpy ships with the extra
             raise ScoringError("SCORER=local requires numpy (the 'local' extra)") from exc
 
-        scores: list[float] = []
+        # Each batch is padded to its longest pair, so batching texts of similar length (longest
+        # first) avoids most of the padding work; scores are returned in input order.
+        order = sorted(range(len(bill_texts)), key=lambda i: len(bill_texts[i]), reverse=True)
+        scores: list[float] = [0.0] * len(bill_texts)
         size = self.max_documents
-        for start in range(0, len(bill_texts), size):
-            chunk = bill_texts[start : start + size]
+        for start in range(0, len(order), size):
+            indices = order[start : start + size]
+            chunk = [bill_texts[i] for i in indices]
             try:
                 encodings = self._tokenizer.encode_batch([(rule_text, t) for t in chunk])
                 input_ids = np.asarray([e.ids for e in encodings], dtype=np.int64)
@@ -148,7 +167,8 @@ class LocalScorer:
                 logits = np.asarray(outputs[0], dtype=np.float64).reshape(len(chunk), -1)[:, 0]
             except Exception as exc:
                 raise ScoringError(f"local scorer failed: {type(exc).__name__}: {exc}") from exc
-            scores.extend(min(1.0, max(0.0, _sigmoid(float(x)))) for x in logits)
+            for i, x in zip(indices, logits, strict=True):
+                scores[i] = min(1.0, max(0.0, _sigmoid(float(x))))
         return scores
 
 

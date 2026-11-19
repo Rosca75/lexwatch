@@ -231,12 +231,15 @@ class UdataResourceAdapter:
     def resolve(self, client: httpx.Client) -> dict[str, Any]:
         """Return the udata resource dict of the file to download."""
         errors: list[str] = []
+        unreachable: SourceError | None = None  # network error or HTTP error other than 404
         dataset: dict[str, Any] | None = None
         for ref in self.dataset_refs:
             try:
                 payload = self._get(client, f"{self.api_url}datasets/{ref}/").json()
             except SourceError as exc:
                 errors.append(str(exc))
+                if exc.network or (exc.status_code is not None and exc.status_code != 404):
+                    unreachable = unreachable or exc
                 continue
             except ValueError as exc:
                 errors.append(f"dataset {ref}: invalid JSON ({exc})")
@@ -249,6 +252,15 @@ class UdataResourceAdapter:
             dataset = payload
             break
         if dataset is None:
+            if unreachable is not None:
+                # The site or the API is down (or a proxy in between): not a missing dataset.
+                host = urlsplit(self.api_url).hostname or "data.public.lu"
+                raise SourceError(
+                    f"{self.name}: {host} unreachable: {unreachable.reason or unreachable}",
+                    status_code=unreachable.status_code,
+                    network=unreachable.network,
+                    reason=unreachable.reason,
+                )
             raise SourceError(f"{self.name}: dataset not found: " + "; ".join(errors))
         resources = dataset.get("resources")
         if not isinstance(resources, list):

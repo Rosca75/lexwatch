@@ -129,7 +129,10 @@ get_db(request) -> Iterator[Session]                              # FastAPI depe
 ```
 
 Routes call `db.commit()` explicitly after writes. Service functions (`upsert_bills`,
-`score_pending_bills`, ...) do **not** commit. They flush, and the caller owns the transaction.
+`score_pending_bills`, ...) do **not** commit on their own. They flush, and the caller owns the
+transaction. Exception: `score_pending_bills` and `rescore_profile` take an optional
+`commit` callback that they call after each scoring batch; the jobs pass `session.commit` so a
+crash keeps completed work and `runs.details["progress"]` is visible while a run is going.
 
 ### Sources (stream 1): `lexwatch.sources.base`
 
@@ -195,8 +198,8 @@ scorer_configured(settings) -> bool    # cheap check for /ready, never calls the
 bill_text(bill, max_chars=4000) -> str # title + summary, whitespace-collapsed, truncated
 
 @dataclass class ScoreResult: scored: int; unscored: int; billed_units: int; error: str | None
-score_pending_bills(session, scorer, run: Run | None) -> ScoreResult
-rescore_profile(session, scorer, profile_id: int) -> ScoreResult
+score_pending_bills(session, scorer, run: Run | None, *, commit=None) -> ScoreResult
+rescore_profile(session, scorer, profile_id: int, *, force=False, run=None, commit=None)
 compute_matches(session, profile, default_threshold: float | None = None) -> int
 preview_matches(session, scorer, rule_texts, threshold, limit=50) -> list[PreviewRow]
 profile_score(rule_scores: list[float]) -> float | None     # plain mean (implemented)
@@ -206,7 +209,14 @@ is_match(score, threshold) -> bool                          # score >= threshold
 - Threshold: `profile.effective_threshold(settings.default_threshold)`. A NULL column means the
   default.
 - Scoring failure: affected bills get `score_state='unscored'` and are retried next run
-  (`score_pending_bills` picks up `pending` **and** `unscored`). Nothing is dropped.
+  (`score_pending_bills` picks up `pending` **and** `unscored`). Nothing is dropped. A pair
+  that already has a current-model score from after the bill's last change is not sent again
+  (resume after a crash).
+- Bills whose title and summary are blank are never sent to the scorer nor matched; they stay
+  `pending` and the scoring queries skip them until a title arrives.
+- Progress: `runs.details["progress"] = {"done": n, "total": m}` (rule-text/bill pairs),
+  written and committed per batch, logged as `scoring.progress`; the admin page shows it next
+  to a running run.
 - `FakeScorer` is deterministic keyword overlap (accent- and case-insensitive) with
   `model_name='fake'`. It adds 1 billed unit per batch, and `calls` records each call for
   assertions.
@@ -312,6 +322,9 @@ Run status lifecycle: `queued -> running -> success | partial | failed`. Per-sou
 detail goes in `runs.details`, for example
 `{"sources": {"chd": {"status": "failed", "error": "..."}}, "digests_sent": 2, "digests_failed": 0, "digests_skipped": 5, "billing": {"unit": "input_tokens"}}`.
 A failed digest makes the digest step fail (run `partial`); the counts are kept.
+`"bootstrap": true` marks the run whose ingestion filled an empty `bills` table; the digest
+ignores timestamps inside that run's window, and a profile's first digest only lists changes
+after the profile was created.
 The admin page reads `status`, `error_message` and `details`. The monthly cost is
 `sum(billed_units)` over `runs.started_at` in the current month, preview runs included.
 

@@ -20,3 +20,8 @@
 {% macro date(value) -%}
 {%- if value -%}{{ value.isoformat() }}{%- endif -%}
 {%- endmacro %}
+
+{# Bill title, or "Projet de loi n° 8627" when the source has none (vote-only records). #}
+{% macro title(bill) -%}
+{%- if bill.title and bill.title.strip() -%}{{ bill.title }}{%- else -%}{{ bill_label(bill.number, bill.type) }}{%- endif -%}
+{%- endmacro %}

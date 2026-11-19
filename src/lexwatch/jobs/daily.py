@@ -33,7 +33,9 @@ def create_run(session: Session, kind: str, requested_by: int | None = None) -> 
 def execute_run(session: Session, run: Run, settings: Settings) -> Run:
     """Execute an existing run row: ingestion, scoring, digests; finalize status and counters.
 
-    Commits after each step so the admin page shows progress.
+    Commits after each step so the admin page shows progress, and during scoring after each
+    batch (``details["progress"]``). An ingestion into an empty ``bills`` table is marked
+    ``details["bootstrap"] = true`` by ``run_ingestion``: the digest ignores what it added.
     """
     from lexwatch.ingest.pipeline import run_ingestion
     from lexwatch.notify.digest import send_digests_report
@@ -63,7 +65,9 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
 
     scorer = get_scorer(settings)
     try:
-        scored = score_pending_bills(session, scorer, run)
+        # Commits after each scoring batch: a crash keeps the scores already computed, and
+        # run.details["progress"] shows how far it is on the admin page.
+        scored = score_pending_bills(session, scorer, run, commit=session.commit)
         run.bills_scored, run.bills_unscored = scored.scored, scored.unscored
         if scored.error:
             errors["scoring"] = scored.error

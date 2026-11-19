@@ -5,7 +5,7 @@ scorer. Otherwise each scorer has its own default, because the score scales diff
 
 - foundry, Rerank 5 (calibrated): 0.50 for ``*-v5-pro``, 0.45 for ``*-v5-fast`` (Cohere's
   recommended cut-offs); Rerank 4 (not calibrated): 0.5 placeholder.
-- local (bge-reranker-v2-m3, sigmoid of a logit): ``LOCAL_DEFAULT_THRESHOLD`` = 0.05,
+- local (bge-reranker-v2-m3, sigmoid of a logit): ``LOCAL_DEFAULT_THRESHOLD`` = 0.03,
   calibrated on real bills (see ``lexwatch.scoring.local``).
 - fake (keyword overlap): 0.3.
 

@@ -183,8 +183,8 @@ def test_profile_saved_during_rescore_stays_pending(db, settings, profile, monke
     """CAS: the worker must not overwrite a 'pending' set while it was rescoring."""
     real = service.rescore_profile
 
-    def rescore_and_resave(session, scorer, profile_id, *, force=False, run=None):
-        result = real(session, scorer, profile_id, force=force, run=run)
+    def rescore_and_resave(session, scorer, profile_id, *, force=False, run=None, commit=None):
+        result = real(session, scorer, profile_id, force=force, run=run, commit=commit)
         # The user saves the profile again meanwhile (the rules route sets 'pending').
         session.execute(
             update(Profile).where(Profile.id == profile_id).values(rescore_status="pending")

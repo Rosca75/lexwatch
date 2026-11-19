@@ -69,7 +69,24 @@ class SourceError(Exception):
 
     Raised by ``SourceAdapter.fetch``. The pipeline catches it per adapter, records it in
     ``runs.details["sources"][name]`` and keeps existing data untouched.
+
+    ``status_code`` is the HTTP status of a non-2xx response; ``network`` is true for a
+    transport failure (DNS, connect, TLS, timeout); ``reason`` is a short description of
+    either (``"502 Bad Gateway"``, ``"ConnectError: ..."``).
     """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        network: bool = False,
+        reason: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.network = network
+        self.reason = reason
 
 
 @dataclass(slots=True)

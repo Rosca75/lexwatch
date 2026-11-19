@@ -62,7 +62,8 @@
   <div class="actions">
     <button type="submit" name="action" value="save" class="primary">{{ t('rules.form.save') }}</button>
     <button type="submit" name="action" value="preview" class="link"
-            hx-post="/rules/preview" hx-target="#preview" hx-include="#profile-form" hx-indicator="#preview">{{ t('rules.form.preview') }}</button>
+            hx-post="/rules/preview" hx-target="#preview" hx-include="#profile-form" hx-indicator="#preview, #preview-busy">{{ t('rules.form.preview') }}</button>
+    <span id="preview-busy" class="htmx-indicator" role="status">{{ t('rules.preview.busy') }}</span>
     <a href="/rules">{{ t('rules.form.cancel') }}</a>
     {% if profile %}<a href="/rules/{{ profile.id }}/delete" class="end">{{ t('rules.form.delete') }}</a>{% endif %}
   </div>

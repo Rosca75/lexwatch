@@ -226,7 +226,7 @@ Every rule score stores the model that produced it. Scores from another model co
    whose scores are stale keep their previous match. The admin page shows how many stale rule
    scores are left; it should reach 0.
 5. **Re-check thresholds.** Default thresholds follow the model: 0.45 for Rerank 5 Fast, 0.5 for
-   Rerank 5 Pro, 0.5 for Rerank 4, 0.05 for the local scorer. **Rerank 4 scores are not
+   Rerank 5 Pro, 0.5 for Rerank 4, 0.03 for the local scorer. **Rerank 4 scores are not
    calibrated**: a fixed 0.5 may be too strict or too loose and depends on the rule. Profiles
    with their own threshold keep it whatever the model. After the rescore, open the main
    profiles, use the Rules preview to compare matches, and adjust. A `DEFAULT_THRESHOLD` set

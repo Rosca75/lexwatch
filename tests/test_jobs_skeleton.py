@@ -21,7 +21,7 @@ def steps(monkeypatch):
         calls.append("ingest")
         return pipeline.IngestResult(added=2, changed=1, sources={"chd": {"status": "ok"}})
 
-    def score(session, scorer, run):
+    def score(session, scorer, run, *, commit=None):
         calls.append("score")
         scorer.billed_units += 3
         return service.ScoreResult(scored=3)

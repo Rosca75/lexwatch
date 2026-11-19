@@ -12,6 +12,11 @@ All records of the successful adapters are merged in one ``upsert_bills`` call, 
 order (112 -> 121 -> chd), so precedence is resolved in memory before anything is written.
 Nothing is committed here; the caller owns the transaction, so ``source_state`` and the bills
 it describes are committed (or rolled back) together.
+
+Bootstrap: an ingestion that adds bills to an empty ``bills`` table (the first run after a
+fresh install) sets ``IngestResult.bootstrap`` and ``run.details["bootstrap"] = true``. The
+digest ignores bills first seen, changed or matched during such a run: the whole history
+arrives at once and none of it is news.
 """
 
 from __future__ import annotations
@@ -27,7 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lexwatch.ingest.merge import upsert_bills
-from lexwatch.models import Run, SourceState
+from lexwatch.models import Bill, Run, SourceState
 from lexwatch.sources.base import (
     SOURCE_FAILED,
     SOURCE_OK,
@@ -48,6 +53,7 @@ class IngestResult:
     added: int = 0
     changed: int = 0
     unchanged: int = 0
+    bootstrap: bool = False  # bills were added to an empty bills table
     # name -> {"status": "ok"|"unchanged"|"failed"|"skipped", "records": n, "error": str, ...}
     sources: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -163,8 +169,12 @@ def run_ingestion(
         if own_client:
             client.close()
 
+    empty = session.scalar(select(Bill.number).limit(1)) is None
     merged = upsert_bills(session, collected, run)
     result.added, result.changed, result.unchanged = merged.added, merged.changed, merged.unchanged
+    result.bootstrap = empty and result.added > 0
+    if result.bootstrap and run is not None:
+        run.details = {**(run.details or {}), "bootstrap": True}
     session.flush()
     log.info(
         "ingest.done",
@@ -173,6 +183,7 @@ def run_ingestion(
             "changed": result.changed,
             "unchanged": result.unchanged,
             "failed_sources": result.failed_sources,
+            "bootstrap": result.bootstrap,
             "run_id": run.id if run is not None else None,
         },
     )

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m with context %}
-{% set heading = t('bill.heading', type=(m.label('bill.type', bill.type) or t('bill.heading.default')), number=bill.number) %}
+{% set heading = bill_label(bill.number, bill.type) %}
 {% block title %}{{ heading }} · {{ t('app.name') }}{% endblock %}
 {% block content %}
 <h1>{{ heading }}</h1>
-<p class="lead">{{ bill.title }}</p>
+{% if bill.title and bill.title.strip() %}<p class="lead">{{ bill.title }}</p>{% endif %}
 
 <dl class="meta">
   {% if bill.status %}<dt>{{ t('bills.col.status') }}</dt><dd>{{ m.label('bill.status', bill.status) }}</dd>{% endif %}

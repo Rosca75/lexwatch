@@ -156,11 +156,11 @@ def test_render_html_and_text_fr(db, scenario):
     assert "Chambre des Députés du Grand-Duché de Luxembourg" in html
     assert 'href="https://www.chd.lu"' in html
     assert "Avis du Conseil d&#39;État" in html  # escaped
-    assert "0.90" in html and "0.75" in html
+    assert "0,90" in html and "0,75" in html  # French decimal comma
     for forbidden in ("<img", "<style", "<script", "<link"):
         assert forbidden not in html
     assert "https://lexwatch.example.lu/bills/8410" in text
-    assert "Statut : Avis du Conseil d'État | Score : 0.75" in text
+    assert "Statut : Avis du Conseil d'État | Score : 0,75" in text
     assert "Source : Chambre des Députés" in text
     assert "<td" not in text
 

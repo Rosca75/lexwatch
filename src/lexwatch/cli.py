@@ -37,7 +37,12 @@ MIGRATION_LOCK_ID = 7_431_001  # pg advisory lock: app and worker may both migra
 
 
 def cmd_migrate(settings: Settings, args: argparse.Namespace) -> int:
+    # Alembic logs several INFO lines per start (plugin setup at import, "Context impl",
+    # "Will assume transactional DDL", one per revision); keep its warnings only and log one
+    # line ourselves. Set before the first alembic import.
+    logging.getLogger("alembic").setLevel(logging.WARNING)
     from alembic import command
+    from alembic.runtime.migration import MigrationContext
     from sqlalchemy import create_engine, text
 
     cfg = _alembic_config(settings)
@@ -47,15 +52,23 @@ def cmd_migrate(settings: Settings, args: argparse.Namespace) -> int:
             conn.execute(text("SELECT pg_advisory_lock(:id)"), {"id": MIGRATION_LOCK_ID})
             conn.commit()
             try:
+                before = MigrationContext.configure(conn).get_current_revision()
                 cfg.attributes["connection"] = conn
                 command.upgrade(cfg, args.revision)
                 conn.commit()
+                current = MigrationContext.configure(conn).get_current_revision()
             finally:
                 conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": MIGRATION_LOCK_ID})
                 conn.commit()
     finally:
         engine.dispose()
-    log.info("migrate.done", extra={"revision": args.revision})
+    target = "head" if args.revision == "head" else args.revision
+    log.info(
+        "migrations: at %s %s",
+        target,
+        current,
+        extra={"event": "migrate.done", "revision": current, "previous": before},
+    )
     return 0
 
 
@@ -205,11 +218,32 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+EXIT_CONFIG = 2  # invalid configuration (like argparse's usage errors)
+
+
+def _refuse(message: str) -> int:
+    """One clear stderr line and one JSON log line, no traceback; exit code 2."""
+    print(f"lexwatch: configuration error: {message}", file=sys.stderr)
+    log.error("config.invalid", extra={"error": message})
+    return EXIT_CONFIG
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    settings = get_settings()
-    configure_logging(settings.log_level)
-    settings.validate()
+    try:
+        settings = get_settings()
+    except ValueError as exc:
+        configure_logging("INFO")
+        return _refuse(str(exc))
+    try:
+        configure_logging(settings.log_level)
+    except ValueError as exc:  # unknown LOG_LEVEL
+        configure_logging("INFO")
+        return _refuse(f"LOG_LEVEL: {exc}")
+    try:
+        settings.validate()
+    except ValueError as exc:
+        return _refuse(str(exc))
     return int(args.func(settings, args) or 0)
 
 

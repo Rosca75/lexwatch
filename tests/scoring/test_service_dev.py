@@ -204,7 +204,9 @@ def test_failed_rule_marks_bills_unscored_and_retries_next_run(db, owner, bills)
     retry = FakeScorer()
     result = score_pending_bills(db, retry, None)
     assert (result.scored, result.unscored, result.error) == (3, 0, None)
-    assert retry.calls == [(AML, 3), (TERROR, 3)]
+    # Only the failed rule is sent again: the AML pairs already have scores from after the
+    # bills' last change.
+    assert retry.calls == [(TERROR, 3)]
     assert len(matches_of(db, profile)) == 3
 
 
@@ -249,7 +251,11 @@ def test_billing_recorded_on_run(db, owner, bills):
     scorer = StubScorer(unit="input_tokens")
     result = score_pending_bills(db, scorer, run)
     assert result.billed_units == 1 and result.billing_unit == "input_tokens"
-    assert run.details == {"sources": {}, "billing": {"unit": "input_tokens"}}
+    assert run.details == {
+        "sources": {},
+        "billing": {"unit": "input_tokens"},
+        "progress": {"done": 3, "total": 3},
+    }
 
 
 # -- compute_matches --------------------------------------------------------------------------

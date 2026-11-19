@@ -17,8 +17,18 @@ from sqlalchemy import and_, func, null, or_, select
 from sqlalchemy.orm import Session
 
 from lexwatch.db import get_db
-from lexwatch.i18n import t
-from lexwatch.models import SEARCH_CONFIG, Bill, BillEvent, Match, Profile, Rule, RuleScore, User
+from lexwatch.i18n import format_score, t
+from lexwatch.models import (
+    SEARCH_CONFIG,
+    Bill,
+    BillEvent,
+    Match,
+    Profile,
+    Rule,
+    RuleScore,
+    User,
+    bill_recency_order,
+)
 from lexwatch.scoring.factory import model_name_for
 from lexwatch.web.deps import get_lang, require_user
 from lexwatch.web.templating import render
@@ -47,14 +57,6 @@ def format_dt(value: datetime | None, request: Request) -> str:
     return value.astimezone(tz).strftime("%Y-%m-%d %H:%M")
 
 
-def format_score(value: float | None, lang: str) -> str:
-    """Two decimals with the locale decimal separator (same as the ``score`` macro)."""
-    if value is None:
-        return ""
-    text = f"{value:.2f}"
-    return text.replace(".", ",") if lang == "fr" else text
-
-
 def is_htmx_fragment(request: Request, target: str) -> bool:
     return (
         request.headers.get("HX-Request") == "true"
@@ -71,12 +73,8 @@ def _int(value: Any, default: int | None = None) -> int | None:
 
 
 def bill_order() -> tuple[Any, ...]:
-    # Numbers are strings ("8410"); length first gives numeric order for plain numbers.
-    return (
-        Bill.filing_date.desc().nullslast(),
-        func.length(Bill.number).desc(),
-        Bill.number.desc(),
-    )
+    """Newest first: bill number descending (assigned at filing; see bill_recency_order)."""
+    return bill_recency_order()
 
 
 def search_filter(q: str) -> Any:
@@ -168,6 +166,29 @@ def _https(value: object) -> str | None:
     return value if isinstance(value, str) and value.startswith("https://") else None
 
 
+def _names(value: object) -> list[str]:
+    """A list of names from source data: a list, or a string (``|``-separated upstream)."""
+    if isinstance(value, str):
+        items: list[object] = value.split("|")
+    elif isinstance(value, list | tuple):
+        items = list(value)
+    else:
+        return []
+    names = [str(item).strip() for item in items if item is not None and str(item).strip()]
+    return list(dict.fromkeys(names))  # dataset 121 repeats a committee for renamed ones
+
+
+def committee_text(extra: dict[str, Any]) -> str | None:
+    """Committee names joined with ", ": full names (``committee_name``) when present,
+    otherwise the abbreviations (``committee``)."""
+    names = _names(extra.get("committee_name")) or _names(extra.get("committee"))
+    return ", ".join(names) or None
+
+
+def _doc_sort_key(doc: dict[str, Any]) -> tuple[bool, str]:
+    return (not doc["date"], doc["date"])  # dated first, ascending; undated last
+
+
 def bill_extra(bill: Bill) -> dict[str, Any]:
     """Display data from ``bill.extra`` (ingestion; optional until the column exists)."""
     extra = getattr(bill, "extra", None) or {}
@@ -183,9 +204,10 @@ def bill_extra(bill: Bill) -> dict[str, Any]:
                     "url": doc["url"],
                 }
             )
+    documents.sort(key=_doc_sort_key)  # stable: procedure order among same-day documents
     return {
-        "committee": str(extra.get("committee") or "") or None,
-        "rapporteur": str(extra.get("rapporteur") or "") or None,
+        "committee": committee_text(extra),
+        "rapporteur": ", ".join(_names(extra.get("rapporteur"))) or None,
         "pdf_url": _https(extra.get("dossier_pdf_url")),
         "documents": documents,
     }

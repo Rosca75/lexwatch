@@ -23,7 +23,9 @@ dependencies = [
 [project.optional-dependencies]
 local = [
     "onnxruntime>=1.18",
-    "tokenizers>=0.19",
+    # <0.23: 0.23 allows huggingface-hub 2.x, which pulls in httpx2, and Authlib then
+    # uses httpx2 instead of httpx (our OIDC client passes httpx settings and transports).
+    "tokenizers>=0.19,<0.23",
     "numpy>=1.26",
 ]
 

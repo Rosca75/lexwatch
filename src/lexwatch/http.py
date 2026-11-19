@@ -65,12 +65,20 @@ def polite_get(client: httpx.Client, url: str, *, delay_seconds: float = 0.0) ->
         try:
             response = client.get(current, follow_redirects=False)
         except httpx.HTTPError as exc:
-            raise SourceError(f"GET {current} failed: {exc!r}") from exc
+            reason = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+            raise SourceError(
+                f"GET {current} failed: {exc!r}", network=True, reason=reason
+            ) from exc
         if response.is_redirect and response.next_request is not None:
             current = str(response.next_request.url)
             continue
         if response.status_code >= 400:
-            raise SourceError(f"GET {current} returned HTTP {response.status_code}")
+            reason = f"{response.status_code} {response.reason_phrase}".strip()
+            raise SourceError(
+                f"GET {current} returned HTTP {reason}",
+                status_code=response.status_code,
+                reason=reason,
+            )
         return response
     raise SourceError(f"GET {url}: more than {MAX_REDIRECTS} redirects")
 
