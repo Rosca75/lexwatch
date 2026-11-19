@@ -111,3 +111,28 @@ Format: date — decision. *Reason.* Alternatives considered.
   status `published`, look up the act whose travaux préparatoires reference the dossier number, store the ELI URI
   in `bills.extra["eli"]`, and add a `law_published` event; amendments to that act could later be tracked as their
   own items. It fits the existing adapter + merge design without schema changes.
+
+## Review and integration fixes
+
+- **2026-11-19 — Preview cost is tracked.** The Rules preview runs only on the explicit "Preview" button (not while
+  typing) and every preview call that bills units writes a `runs` row of kind `preview` (migration 0004), counted in
+  the admin monthly total but hidden from the runs table. Migration 0004 also fixes a doubled constraint name
+  (`ck_runs_ck_runs_kind`) created by 0001.
+- **2026-11-19 — "Rescore all" forces a full rescore.** It queues one `runs(kind='rescore', details.force=true)` row
+  that the worker executes profile by profile; `lexwatch rescore --all` does the same. A plain rule save only scores
+  what is missing.
+- **2026-11-19 — Default-threshold changes take effect at worker start.** Matches of profiles without their own
+  threshold are recomputed (no scoring calls) when the worker starts.
+- **2026-11-19 — No client IPs in logs.** Uvicorn's access log is replaced by an `http.request` line (method, path
+  without query string, status, duration, user id). SMTP errors are reduced to exception type and SMTP code, so
+  recipient addresses never reach logs or the admin page.
+- **2026-11-19 — Hover guidance** uses a small CSS tooltip (`data-tip`) shown on hover and on keyboard focus, linked
+  with `aria-describedby`; the `title` attribute was dropped on those elements to avoid a double tooltip.
+- **2026-11-19 — Short type labels in the bills table** ("Projet"/"Proposition", "Bill"/"Member's bill"); the bill
+  page keeps the full labels.
+- **2026-11-19 — Hardening.** `SCORER=fake` is refused in production; compose requires `POSTGRES_PASSWORD`; the
+  image is multi-stage and does not ship `uv`.
+- **2026-11-19 — End-to-end environment.** The build container reaches the internet through a TLS-intercepting proxy
+  bound to the host loopback; the end-to-end run used a compose override with a CA build secret, a mounted CA bundle
+  and a small TCP relay so containers could reach the proxy. None of this is in the repository; the README
+  documents the pattern for client proxies.
