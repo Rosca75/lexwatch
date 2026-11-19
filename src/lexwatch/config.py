@@ -99,6 +99,7 @@ class Settings:
     local_model_file: str = "onnx/model_int8.onnx"
     local_max_length: int = 512
     local_batch_size: int = 8
+    local_threads: int = 0  # onnxruntime intra-op threads; 0 = CPUs available to the process
 
     # --- email ---------------------------------------------------------------------------
     smtp_host: str = ""
@@ -183,6 +184,7 @@ class Settings:
             local_model_file=_str(e.get("LOCAL_MODEL_FILE"), d.local_model_file),
             local_max_length=_int(e.get("LOCAL_MAX_LENGTH"), d.local_max_length),
             local_batch_size=_int(e.get("LOCAL_BATCH_SIZE"), d.local_batch_size),
+            local_threads=_int(e.get("LOCAL_THREADS"), d.local_threads),
             smtp_host=_str(e.get("SMTP_HOST")),
             smtp_port=_int(e.get("SMTP_PORT"), d.smtp_port),
             smtp_username=_str(e.get("SMTP_USERNAME")),

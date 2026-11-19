@@ -102,7 +102,9 @@ def test_scores_with_mocked_session(tmp_path):
     assert scores == pytest.approx(expected, rel=1e-5)
     assert all(0.0 <= x <= 1.0 for x in scores)
     assert [len(b) for b in tok.batches] == [2, 1]  # batched by local_batch_size
-    assert tok.batches[0][0] == ("blanchiment", "un")  # (query, document) pairs
+    # (query, document) pairs, longest documents batched first (less padding)
+    assert tok.batches[0][0] == ("blanchiment", "un deux trois quatre")
+    assert tok.batches[1] == [("blanchiment", "un")]
     assert tok.truncation["max_length"] == 256
     assert tok.padding["pad_id"] == 1
     assert scorer.score_many("x", []) == []
