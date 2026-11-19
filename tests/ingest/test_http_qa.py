@@ -157,11 +157,6 @@ def test_robots_txt_is_fetched_once_with_the_user_agent(clock):
     assert set(site.agents) == {UA}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: polite_get follows redirects without re-checking robots.txt; an allowed URL "
-    "that redirects to /fr/dossier/N fetches the disallowed page",
-)
 def test_redirect_to_a_disallowed_page_is_not_followed(clock):
     site = ChdSite()
     site.redirects["/fr/deputies"] = "https://www.chd.lu/fr/dossier/8000"
@@ -170,11 +165,6 @@ def test_redirect_to_a_disallowed_page_is_not_followed(clock):
     assert "https://www.chd.lu/fr/dossier/8000" not in site.calls
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: percent-encoded unreserved characters are not decoded before matching "
-    "(RFC 9309 2.2.2): /fr/%64ossier/8000 (= /fr/dossier/8000) is allowed",
-)
 def test_percent_encoded_dossier_path_is_refused(clock):
     site = ChdSite()
     with pytest.raises(SourceError):
@@ -205,11 +195,6 @@ def test_robots_network_failure_fails_closed(exc, clock):
     assert site.pages() == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: robots.txt answered with 429 Too Many Requests (rate limit / bot protection) "
-    "is treated as 'no robots.txt, everything allowed' instead of failing closed",
-)
 def test_robots_rate_limited_fails_closed(clock):
     site = ChdSite(robots_status=429)
     with pytest.raises(SourceError):
@@ -293,11 +278,6 @@ def test_different_hosts_are_paced_independently(clock):
     assert clock.sleeps == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: the robots.txt request is not paced; the first chd.lu page is requested "
-    "immediately after robots.txt on the same host (no delay between the two requests)",
-)
 def test_robots_fetch_and_first_page_are_spaced(clock):
     site = ChdSite(clock=clock)
     polite_get(site.client(), "https://www.chd.lu/fr/deputies", delay_seconds=2.0)

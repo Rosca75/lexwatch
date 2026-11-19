@@ -97,3 +97,22 @@ def test_polite_get_refuses_dossier_pages():
         polite_get(client, "https://www.chd.lu/fr/dossier/8410")
     assert calls == ["https://www.chd.lu/robots.txt"]  # the page itself was never requested
     assert polite_get(client, "https://www.chd.lu/fr/deputy/49").status_code == 200
+
+
+def test_html_page_instead_of_robots_fails_closed():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, text="<html><body>Challenge</body></html>", headers={"content-type": "text/html"}
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), headers={"User-Agent": UA})
+    assert robots.is_allowed(client, "https://www.chd.lu/fr/deputy/49", UA) is False
+
+
+def test_rate_limited_robots_fails_closed():
+    assert robots.is_allowed(_client(429, ""), "https://www.chd.lu/fr/deputy/49", UA) is False
+
+
+def test_percent_encoded_unreserved_chars_are_decoded():
+    assert robots.normalize_path("/fr/%64ossier/%2F%7e") == "/fr/dossier/%2F~"
+    assert robots.is_allowed(_client(), "https://www.chd.lu/fr/%64ossier/1", UA) is False

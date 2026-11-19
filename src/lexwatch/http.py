@@ -42,25 +42,47 @@ def _pace(host: str, delay_seconds: float) -> None:
         _last_request[host] = time.monotonic()
 
 
-def polite_get(client: httpx.Client, url: str, *, delay_seconds: float = 0.0) -> httpx.Response:
-    """GET ``url`` politely: per-host delay, redirects followed, robots.txt gate for chd.lu.
+MAX_REDIRECTS = 10
 
-    Raises ``SourceError`` when robots.txt forbids the URL or the response is not 2xx, and
-    lets transport errors surface as ``SourceError`` too so adapters fail cleanly.
+
+def polite_get(client: httpx.Client, url: str, *, delay_seconds: float = 0.0) -> httpx.Response:
+    """GET ``url`` politely: per-host delay, robots.txt gate for chd.lu, redirects followed.
+
+    Redirects are followed manually, one hop at a time, so every hop is paced and a hop to a
+    robots-gated host is checked against robots.txt before it is requested. The robots.txt
+    download itself is paced like any other request to that host.
+
+    Raises ``SourceError`` when robots.txt forbids a URL, the response is not 2xx, there are
+    too many redirects, or the transport fails.
     """
     from lexwatch.sources.base import SourceError
-    from lexwatch.sources.robots import is_allowed
 
-    host = (urlsplit(url).hostname or "").lower()
-    if host in ROBOTS_GATED_HOSTS:
-        agent = client.headers.get("User-Agent", "lexwatch")
-        if not is_allowed(client, url, agent):
-            raise SourceError(f"robots.txt disallows {url}")
-    _pace(host, delay_seconds)
-    try:
-        response = client.get(url, follow_redirects=True)
-    except httpx.HTTPError as exc:
-        raise SourceError(f"GET {url} failed: {exc!r}") from exc
-    if response.status_code >= 400:
-        raise SourceError(f"GET {url} returned HTTP {response.status_code}")
-    return response
+    current = url
+    for _ in range(MAX_REDIRECTS + 1):
+        host = (urlsplit(current).hostname or "").lower()
+        _check_robots(client, current, host, delay_seconds)
+        _pace(host, delay_seconds)
+        try:
+            response = client.get(current, follow_redirects=False)
+        except httpx.HTTPError as exc:
+            raise SourceError(f"GET {current} failed: {exc!r}") from exc
+        if response.is_redirect and response.next_request is not None:
+            current = str(response.next_request.url)
+            continue
+        if response.status_code >= 400:
+            raise SourceError(f"GET {current} returned HTTP {response.status_code}")
+        return response
+    raise SourceError(f"GET {url}: more than {MAX_REDIRECTS} redirects")
+
+
+def _check_robots(client: httpx.Client, url: str, host: str, delay_seconds: float) -> None:
+    from lexwatch.sources import robots
+    from lexwatch.sources.base import SourceError
+
+    if host not in ROBOTS_GATED_HOSTS:
+        return
+    agent = client.headers.get("User-Agent", "lexwatch")
+    if not robots.is_cached(url):
+        _pace(host, delay_seconds)  # the robots.txt request counts as a request to the host
+    if not robots.is_allowed(client, url, agent):
+        raise SourceError(f"robots.txt disallows {url}")

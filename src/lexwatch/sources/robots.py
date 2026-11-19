@@ -14,8 +14,10 @@ lexwatch is stricter than the RFC by default (``conservative=True``): a URL matc
 matters for pagers such as ``/fr/deputies?page=2``, which ``Allow: /*/deputies`` would
 otherwise let through although the site clearly means ``Disallow: /*?page=``.
 
-Failure policy (RFC 9309 section 2.3.1): robots.txt 4xx (other than 401/403) means "everything
-allowed"; 401/403, 5xx or a network error means "everything disallowed".
+Failure policy (RFC 9309 section 2.3.1, fail closed where in doubt): robots.txt 4xx (other
+than 401/403/429) means "everything allowed"; 401/403, 429 (rate limit / bot protection), 5xx,
+a network error, or a 200 answer that is an HTML page without any robots directive (a
+maintenance or challenge page) means "everything disallowed". Failures are cached like rules.
 """
 
 from __future__ import annotations
@@ -46,7 +48,23 @@ class _Group:
     rules: list[_Rule] = field(default_factory=list)
 
 
+_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+_PCT_RE = re.compile(r"%([0-9A-Fa-f]{2})")
+
+
+def normalize_path(path: str) -> str:
+    """Decode percent-encoded unreserved characters, upper-case the other escapes (RFC 3986
+    6.2.2), so ``/fr/%64ossier/1`` is matched as ``/fr/dossier/1`` (RFC 9309 2.2.2)."""
+
+    def repl(match: re.Match[str]) -> str:
+        char = chr(int(match.group(1), 16))
+        return char if char in _UNRESERVED else "%" + match.group(1).upper()
+
+    return _PCT_RE.sub(repl, path)
+
+
 def _compile(pattern: str) -> re.Pattern[str]:
+    pattern = normalize_path(pattern)
     anchored = pattern.endswith("$")
     body = pattern[:-1] if anchored else pattern
     regex = ".*".join(re.escape(part) for part in body.split("*"))
@@ -107,6 +125,7 @@ class RobotsRules:
         path = parts.path or "/"
         if parts.query:
             path = f"{path}?{parts.query}"
+        path = normalize_path(path)
         if path == "/robots.txt":
             return True
         group = self._group_for(user_agent)
@@ -138,17 +157,38 @@ def _load(client: httpx.Client, base: str, user_agent: str) -> RobotsRules:
     except httpx.HTTPError as exc:
         log.warning("robots.fetch_failed", extra={"host": base, "error": repr(exc)})
         return RobotsRules(deny_all=True)
-    if response.status_code in (401, 403) or response.status_code >= 500:
+    if response.status_code in (401, 403, 429) or response.status_code >= 500:
         return RobotsRules(deny_all=True)
     if response.status_code >= 400:
         return RobotsRules(allow_all=True)
-    return RobotsRules.parse(response.text)
+    rules = RobotsRules.parse(response.text)
+    if not rules.groups and _looks_like_html(response):
+        log.warning("robots.html_instead_of_robots", extra={"host": base})
+        return RobotsRules(deny_all=True)
+    return rules
+
+
+def _looks_like_html(response: httpx.Response) -> bool:
+    if "html" in response.headers.get("content-type", "").lower():
+        return True
+    head = response.text.lstrip()[:200].lower()
+    return head.startswith(("<!doctype", "<html", "<?xml", "<"))
+
+
+def _base(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}".lower()
+
+
+def is_cached(url: str) -> bool:
+    """True when the robots.txt of ``url``'s host is cached and fresh (no fetch needed)."""
+    cached = _cache.get(_base(url))
+    return cached is not None and time.monotonic() - cached[0] <= CACHE_TTL_SECONDS
 
 
 def is_allowed(client: httpx.Client, url: str, user_agent: str) -> bool:
     """True when ``url`` may be fetched by ``user_agent`` according to its host's robots.txt."""
-    parts = urlsplit(url)
-    base = f"{parts.scheme}://{parts.netloc}"
+    base = _base(url)
     now = time.monotonic()
     cached = _cache.get(base)
     if cached is None or now - cached[0] > CACHE_TTL_SECONDS:
