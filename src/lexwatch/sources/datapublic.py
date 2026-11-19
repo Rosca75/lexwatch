@@ -123,7 +123,6 @@ STATUS_121: dict[str, str | None] = {
     "TRANSFO": STATUS_TRANSFORMED,
     ".": None,
 }
-REQUIRED_121_COLUMNS = ("Dossier", "Nature", "Relatif à", "Etat", "Dépôt")
 # Procedure-step date columns (in procedure order) -> label of the linked document.
 # Dates go to extra["dates"] (keyed by column); linked cells to extra["documents"].
 DATE_COLUMNS_121: dict[str, str] = {
@@ -149,6 +148,21 @@ DATE_COLUMNS_121: dict[str, str] = {
     "AvisCP": "Avis de la Conférence des Présidents",
     "Publication": "Publication au Journal officiel",
 }
+# Every column the parser reads: a missing one is a structure change (SourceError), never a
+# silent loss of data.
+REQUIRED_121_COLUMNS = (
+    "Dossier",
+    "Nature",
+    "Relatif à",
+    "Etat",
+    "EUR",
+    "co_co",
+    *DATE_COLUMNS_121,
+    "Auteurs",
+    "Comm",
+    "Rapporteur",
+    "cmt_commission",
+)
 # closing_date for a 121 row, by normalized status: first non-empty column wins. 112's
 # LAW_EVACUATION_DATE equals DispVote for adopted/published bills, so DispVote comes first.
 CLOSING_COLUMNS_121: dict[str, tuple[str, ...]] = {
@@ -220,12 +234,20 @@ class UdataResourceAdapter:
         dataset: dict[str, Any] | None = None
         for ref in self.dataset_refs:
             try:
-                dataset = self._get(client, f"{self.api_url}datasets/{ref}/").json()
-                break
+                payload = self._get(client, f"{self.api_url}datasets/{ref}/").json()
             except SourceError as exc:
                 errors.append(str(exc))
+                continue
             except ValueError as exc:
                 errors.append(f"dataset {ref}: invalid JSON ({exc})")
+                continue
+            if not isinstance(payload, dict):
+                raise SourceError(
+                    f"{self.name}: dataset {ref}: API JSON is a {type(payload).__name__}, "
+                    "expected an object"
+                )
+            dataset = payload
+            break
         if dataset is None:
             raise SourceError(f"{self.name}: dataset not found: " + "; ".join(errors))
         resources = dataset.get("resources")
@@ -274,12 +296,12 @@ class UdataResourceAdapter:
             algo, _, expected = state.checksum.partition(":")
             if algo in {"sha1", "md5", "sha256"}:
                 actual = hashlib.new(algo, content).hexdigest()
-                if actual != expected:
-                    # Usually a file replaced between the API call and the download; the
-                    # content is still the newest, so parse it, but say so.
-                    log.warning(
-                        "ingest.checksum_mismatch",
-                        extra={"source": self.name, "expected": expected, "actual": actual},
+                if actual != expected.lower():
+                    # Truncated or corrupted download, or a file replaced between the API
+                    # call and the download: never parse it; the next run retries.
+                    raise SourceError(
+                        f"{self.name}: checksum mismatch for resource {state.resource_id} "
+                        f"({algo} expected {expected}, got {actual}, {len(content)} bytes)"
                     )
         return content
 
@@ -321,6 +343,12 @@ def parse_112_csv(
     try:
         for row in reader:
             rows += 1
+            if None in row or any(row.get(c) is None for c in REQUIRED_112_COLUMNS):
+                # fewer (or more) cells than the header: a truncated or malformed file
+                raise SourceError(
+                    f"{SOURCE_112}: row {rows} has {len(row) - (None in row)} cells instead of "
+                    f"{len(reader.fieldnames or [])} (truncated or malformed CSV)"
+                )
             raw_type = (row.get("LAW_TYPE") or "").strip()
             bill_type = KEPT_112_TYPES.get(raw_type)
             if bill_type is None:

@@ -14,7 +14,8 @@ Owned by stream 1. Rules (see ``docs/ingestion.md`` for the rationale):
   record's.
 - ``None`` / ``""`` never blanks out a field.
 - Title: a chd vote title (a short label taken from the vote name) is used only while the bill
-  has no title. It never replaces a title, and is replaced by any 112/121 title. Titles that
+  has no title. It never replaces a title, and is replaced by any 112/121 title whatever the
+  timestamps (``extra["title_source"]`` is ``"vote"`` or ``"dataset"``). Titles that
   differ only in whitespace or case count as equal (no event).
 - Every change to a field of ``models.TRACKED_BILL_FIELDS`` writes one ``bill_events`` row
   (field, old, new, changed_at, source of the winning record).
@@ -57,6 +58,11 @@ MERGED_FIELDS = (
     "summary",
 )
 
+# bills.extra key recording where the current title comes from: a chd vote label is replaced by
+# any 112/121 title whatever the timestamps.
+TITLE_SOURCE_KEY = "title_source"
+TITLE_FROM_VOTE = "vote"
+TITLE_FROM_DATASET = "dataset"
 # Fields that only a record at least as new as the bill's current state may set.
 WINNER_ONLY_FIELDS = frozenset({"status", "closing_date"})
 
@@ -127,17 +133,28 @@ class _Draft:
                 continue
             old = self.values[field]
             empty = old is None or old == ""
+            replaces_vote_label = (
+                field == "title"
+                and record.source != SOURCE_CHD
+                and self.extra.get(TITLE_SOURCE_KEY) == TITLE_FROM_VOTE
+            )
             if field == "title" and record.source == SOURCE_CHD and not empty:
                 continue  # a vote label never replaces a title
-            if not wins and (not empty or field in WINNER_ONLY_FIELDS):
+            if not wins and not replaces_vote_label and (not empty or field in WINNER_ONLY_FIELDS):
                 continue
             if not empty and _same(field, old, new):
                 continue
             self.values[field] = new
             self.changed_by[field] = record.source
+            if field == "title":
+                self.extra[TITLE_SOURCE_KEY] = (
+                    TITLE_FROM_VOTE if record.source == SOURCE_CHD else TITLE_FROM_DATASET
+                )
             touched = True
         for key, new in (record.extra or {}).items():
             # shallow merge: a key is set when absent or when the record wins; never dropped
+            if key == TITLE_SOURCE_KEY:
+                continue
             if new is not None and (wins or key not in self.extra):
                 self.extra[key] = new
         if wins and record.source_updated_at is not None:
@@ -222,5 +239,6 @@ def upsert_bills(session: Session, records: Iterable[BillRecord], run: Run | Non
         session.add_all(new_bills)
     session.flush()
     if events:
-        session.execute(insert(BillEvent), events)
+        # Core executemany: one statement for all events (psycopg pipelines the rows).
+        session.execute(insert(BillEvent.__table__), events)
     return stats

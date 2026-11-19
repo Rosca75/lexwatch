@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, date, datetime
 
+import httpx
 import pytest
 
 from lexwatch.sources.base import (
@@ -14,6 +16,7 @@ from lexwatch.sources.base import (
 from lexwatch.sources.datapublic import (
     EXCLUDED_112_TYPES,
     KEPT_112_TYPES,
+    REQUIRED_121_COLUMNS,
     STATUS_112,
     STATUS_121,
     Dataset112Adapter,
@@ -42,9 +45,8 @@ def test_112_fetch_resolves_csv_and_downloads_via_stable_alias(dp):
     assert dp.calls[0] == f"{API}datasets/{ID_112}/"
     assert dp.calls[1] == f"https://data.public.lu/fr/datasets/r/{CSV_112}"
     assert len(dp.downloads()) == 1
-    assert adapter.state == ResourceState(
-        CSV_112, LM_112, "sha1:cd8e53c27c318fc09b4af0523520ce149cf4bed4"
-    )
+    sha1 = hashlib.sha1(dp.files[CSV_112]).hexdigest()
+    assert adapter.state == ResourceState(CSV_112, LM_112, f"sha1:{sha1}")
     assert adapter.unchanged is False
     assert records and all(r.source == "datapublic-112" for r in records)
     assert all(r.source_updated_at == LM_112 for r in records)
@@ -114,9 +116,8 @@ def test_112_not_utf8_is_a_source_error():
 
 def test_unchanged_resource_is_not_downloaded(dp):
     adapter = Dataset112Adapter(API, request_delay_seconds=0)
-    adapter.known_state = ResourceState(
-        CSV_112, LM_112, "sha1:cd8e53c27c318fc09b4af0523520ce149cf4bed4"
-    )
+    sha1 = hashlib.sha1(dp.files[CSV_112]).hexdigest()
+    adapter.known_state = ResourceState(CSV_112, LM_112, f"sha1:{sha1}")
     assert adapter.fetch(dp.client()) == []
     assert adapter.unchanged is True
     assert dp.downloads() == []
@@ -218,7 +219,9 @@ def test_121_multiple_authors_joined():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "ETAT_TRAVAUX"
-    ws.append(["Dossier", "Nature", "Relatif à", "Etat", "Dépôt", "Auteurs", "Vote1", "co_co"])
+    header = ["Dossier", "Nature", "Relatif à", "Etat", "Dépôt", "Auteurs", "Vote1", "co_co"]
+    header += [c for c in REQUIRED_121_COLUMNS if c not in header]  # all read columns
+    ws.append(header)
     ws.append(
         [
             "8001",
@@ -332,3 +335,31 @@ def test_112_and_121_crosswalk_agree():
     }
     for code_112, code_121 in pairs.items():
         assert STATUS_112[code_112] == STATUS_121[code_121]
+
+
+def test_checksum_mismatch_is_a_source_error(dp):
+    """A truncated/corrupted download never reaches the parser."""
+
+    def handler(request):
+        if request.url.host == "download.data.public.lu":
+            return httpx.Response(200, content=dp.files[CSV_112][:-500])
+        return None
+
+    dp.on_request = handler
+    with pytest.raises(SourceError, match="checksum mismatch"):
+        Dataset112Adapter(API, request_delay_seconds=0).fetch(dp.client())
+
+
+def test_112_truncated_inside_a_quoted_cell_is_a_source_error():
+    raw = (FIXTURES / "datapublic" / "112-texte-loi.sample.csv").read_bytes()
+    cut = raw.rindex(b'"Projet de loi') + 20
+    with pytest.raises(SourceError, match="truncated"):
+        parse_112_csv(raw[:cut], LM_112)
+
+
+def test_api_json_list_is_a_source_error(dp):
+    dp.on_request = lambda request: (
+        httpx.Response(200, json=[]) if "/api/1/" in request.url.path else None
+    )
+    with pytest.raises(SourceError, match="expected an object"):
+        Dataset112Adapter(API, request_delay_seconds=0).fetch(dp.client())

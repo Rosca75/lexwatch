@@ -240,12 +240,6 @@ def _ts(value: datetime) -> dict:
     return {"source_updated_at": value}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a 121/112 title older than the vote does not replace a chd vote label "
-    "(docs: 'Any 112/121 title replaces a vote label'); happens when 121 failed on the run "
-    "that first saw the vote",
-)
 def test_vote_label_is_replaced_by_older_dataset_title(db):
     upsert_bills(db, [rvote("8600", ts=VOTE_AFTER, title="Logements abordables")], None)
     upsert_bills(db, [r121("8600", title="Projet de loi relative aux logements abordables")], None)
@@ -476,11 +470,6 @@ def test_bulk_merge_of_5000_unchanged_records_uses_few_statements(db):
     assert len(seen) < 5, f"{len(seen)} statements for {N_BULK} unchanged bills"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: bill_events are inserted one statement per event (10,001 INSERTs, ~6 s for "
-    "5,000 changed bills with 3 changed fields each), not one bulk INSERT as documented",
-)
 def test_bulk_merge_of_5000_changed_records_uses_few_statements(db):
     upsert_bills(db, _bulk_new(), None)
     db.flush()

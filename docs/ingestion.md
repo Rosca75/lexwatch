@@ -17,6 +17,13 @@ fetch of a chd.lu URL must use `lexwatch.http.polite_get`. It checks robots.txt 
 `lexwatch.sources.robots` and refuses dossier, search, ajax and `?page=` URLs.
 `urllib.robotparser` does not support the `*`/`$` wildcards that chd.lu uses, so the gate
 has its own small matcher. It is stricter than RFC 9309: any matching `Disallow` wins.
+Percent-encoded unreserved characters are decoded before matching (`/fr/%64ossier/1` is
+`/fr/dossier/1`). Fail closed: robots.txt answering 401/403/429/5xx, a network error, or a 200
+HTML page without any robots directive (maintenance or bot-challenge page) disallows the whole
+host; a plain 404 means "no rules". The answer, including a failure, is cached for 24 h.
+`polite_get` follows redirects itself, one hop at a time: every hop is paced and re-checked
+against robots.txt, so an allowed URL redirecting to a dossier page is refused. The robots.txt
+request is paced like any other request to the host.
 
 ## Resolution, politeness, skip
 
@@ -25,8 +32,9 @@ has its own small matcher. It is stricter than RFC 9309: any matching `Disallow`
   resources of the expected format, prefers a title prefix (`112-texte-loi`,
   `121-etat-travaux`, `109-votes`), and picks the highest `last_modified`.
 - Download: `https://data.public.lu/fr/datasets/r/{resource_id}` (stable alias, 302 to the
-  timestamped file, redirects followed). A checksum mismatch after download is logged, not
-  fatal.
+  timestamped file, redirects followed). When the API publishes a checksum (sha1/md5), the
+  downloaded bytes must match it, otherwise `SourceError` (truncated or corrupted download, or
+  a file replaced mid-run; the next run retries). The API JSON must be an object.
 - One request at a time. Requests to the same host are spaced by
   `DATAPUBLIC_REQUEST_DELAY_SECONDS` (default 1) or `CHD_REQUEST_DELAY_SECONDS` (default 2).
   The User-Agent comes from `HTTP_USER_AGENT`.
@@ -70,6 +78,8 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
 ## Dataset 112 (CSV)
 
 - UTF-8 with BOM (`utf-8-sig`), real CSV parser (cells contain line breaks), `NATURE` dropped.
+- A row with fewer or more cells than the header (e.g. a file cut inside a quoted cell) is a
+  `SourceError`, never a bill with a truncated title.
 - Kept `LAW_TYPE`: `ProjetDeLoi` and `PropositionDeLoi` (`KEPT_112_TYPES`). Excluded on
   2026-11-19 (counted in `stats.excluded_types`): ProjetDeReglementGrandDucal 487,
   PropositionDeRevisionReglementCHD 91, DebatOrientation 75,
@@ -90,7 +100,9 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
 
 - openpyxl without `read_only`, because hyperlinks are needed. Sheet `ETAT_TRAVAUX`.
   Columns are mapped by header name, and a header starting with `Recev` is read as
-  `Recev?`.
+  `Recev?`. Every column the parser reads (`REQUIRED_121_COLUMNS`: identity, status, flags,
+  all procedure dates, Auteurs, Comm, Rapporteur, cmt_commission) is required; a renamed or
+  missing one is a `SourceError` rather than silently lost data.
 - Kept `Nature`: `PL` and `PPL`.
 - Title: the leading `.` is stripped and `¯` becomes a line break. The type prefix
   ("Projet de loi " / "Proposition de loi ") is added unless the text already has it, so 121
@@ -120,7 +132,8 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
 
 ## chd: plenary votes (dataset 109)
 
-- Encoding: cp1252 (UTF-8 when a BOM is present). One row per deputy per vote. Rows are
+- Encoding: strict UTF-8 first (with or without BOM), then cp1252 (today's export), then
+  latin-1. One row per deputy per vote. Rows are
   aggregated per `(meeting_date, vote_name, vote_type)`.
 - Bill vote name:
   - Accepted forms: `^(PL|PPL)\s?(\d{4}[A-Z]?)\b`, or `Projet de loi [N°]xxxx` /
@@ -151,7 +164,7 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
 - The pipeline collects the records of all successful adapters in order 112, 121, chd. It
   calls `upsert_bills` once, which loads all bills into a dict (one query), folds every
   record onto the bill state in memory, then writes the net difference. Rows are inserted
-  with `add_all` and events with one bulk `INSERT`. There are no per-row queries.
+  with `add_all` and events with one Core `insert(BillEvent.__table__)` executemany. There are no per-row queries.
 - A bill created in this run gets no events. A value changed twice in one run gives one
   event.
 - Precedence:
@@ -163,7 +176,9 @@ Types: `projet`, `proposition`. Statuses: `deposited`, `in_committee`, `council_
 - `None` or an empty string never blanks a field.
 - Title rules:
   - A chd vote label never replaces a title.
-  - Any 112/121 title replaces a vote label.
+  - Any 112/121 title replaces a vote label, whatever the timestamps (e.g. 121 failed on the
+    run that first saw the vote and recovers later). `extra["title_source"]` records where the
+    current title comes from: `"vote"` or `"dataset"`.
   - Titles that differ only in whitespace or case count as equal.
 - Every change to a `TRACKED_BILL_FIELDS` field writes a `bill_events` row with the field,
   the old and new values (dates as ISO text), `changed_at` and the winning record's source.
@@ -191,7 +206,8 @@ Stable keys (the web stream may rely on them):
 
 Other keys are informative and may change: `raw_type`, `documents_list` (112),
 `committee_name`, `committee_url`, `rapporteur_url`, `author_url`, `dates`,
-`eu_transposition` (121), `vote_name`, `vote_type`, `vote_date`, `votes` (chd).
+`eu_transposition` (121), `vote_name`, `vote_type`, `vote_date`, `votes` (chd),
+`title_source` (merge: `"vote"` or `"dataset"`).
 
 ## Failures
 

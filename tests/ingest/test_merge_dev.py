@@ -238,7 +238,11 @@ def test_bulk_upsert_of_thousands(db):
 def test_extra_is_shallow_merged_without_events(db):
     upsert_bills(db, [rec(extra={"raw_status": "EnCommission", "documents_list": "Dépôt"})], None)
     bill = db.get(Bill, "8000")
-    assert bill.extra == {"raw_status": "EnCommission", "documents_list": "Dépôt"}
+    assert bill.extra == {
+        "raw_status": "EnCommission",
+        "documents_list": "Dépôt",
+        "title_source": "dataset",
+    }
     bill.score_state = "scored"
     stamp = bill.last_changed_at
     db.flush()
@@ -261,6 +265,7 @@ def test_extra_is_shallow_merged_without_events(db):
         "documents_list": "Dépôt",  # keys are never dropped
         "documents": docs,
         "dossier_pdf_url": "https://x",
+        "title_source": "dataset",
     }
     assert bill.score_state == "scored"
     assert bill.last_changed_at == stamp
@@ -275,4 +280,21 @@ def test_older_extra_only_fills_missing_keys(db):
         None,
     )
     db.expire_all()
-    assert db.get(Bill, "8000").extra == {"raw_status": "PUB_JO", "votes": {"Oui": 3}}
+    assert db.get(Bill, "8000").extra == {
+        "raw_status": "PUB_JO",
+        "votes": {"Oui": 3},
+        "title_source": "dataset",
+    }
+
+
+def test_vote_label_is_replaced_by_an_older_dataset_title(db):
+    upsert_bills(
+        db, [rec("8600", source="chd", ts=TVOTE_NEW, title="Label", status="adopted")], None
+    )
+    assert db.get(Bill, "8600").extra["title_source"] == "vote"
+    upsert_bills(db, [rec("8600", source="datapublic-121", ts=T121, title="Projet de loi x")], None)
+    bill = db.get(Bill, "8600")
+    assert bill.title == "Projet de loi x"
+    assert bill.status == "adopted"  # the newer vote keeps the status
+    assert bill.extra["title_source"] == "dataset"
+    assert [e.field for e in events(db, "8600")] == ["title"]

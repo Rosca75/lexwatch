@@ -5,8 +5,8 @@ chd.lu HTML is **not** scraped: its robots.txt disallows dossier, search and aja
 votes (``109-votes.csv``, regenerated about 04:30 UTC) through the same udata resolution as
 datasets 112/121, and turns final votes on bills into status changes:
 
-- one CSV row per deputy per vote (cp1252); rows are aggregated per
-  ``(meeting_date, vote_name, vote_type)`` and Oui/Non are counted;
+- one CSV row per deputy per vote (cp1252 today; strict UTF-8 is tried first); rows are
+  aggregated per ``(meeting_date, vote_name, vote_type)`` and Oui/Non are counted;
 - a vote is a *bill vote* when ``vote_name`` starts with ``PL``/``PPL`` + number (or
   ``Projet de loi N°xxxx`` / ``Proposition de loi N°xxxx``) and is not a motion, an
   amendment or a separate vote on an article;
@@ -110,8 +110,12 @@ class _Vote:
 
 
 def _decode(content: bytes) -> str:
-    if content.startswith(b"\xef\xbb\xbf"):
+    """Strict UTF-8 first (with or without BOM), then cp1252 (the current export), then
+    latin-1. cp1252 text with accents is almost never valid UTF-8, so the order is safe."""
+    try:
         return content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
     try:
         return content.decode("cp1252")
     except UnicodeDecodeError:

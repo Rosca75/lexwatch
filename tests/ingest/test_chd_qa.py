@@ -91,11 +91,6 @@ def test_utf8_with_bom_is_decoded():
     assert recs["8800"].title == "Sécurité des écoles"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a UTF-8 votes file without BOM is decoded as cp1252, giving mojibake titles "
-    "('SÃ©curitÃ©') instead of trying strict UTF-8 first",
-)
 def test_utf8_without_bom_is_decoded():
     recs = parse(
         rows("2026-07-15 15:23:32", "PL 8800 - Sécurité des écoles", FIRST, {"Oui": 2}),

@@ -349,11 +349,6 @@ def test_vote_label_does_not_replace_121_title_in_one_run(db, dp):
     assert n_events(db) == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: when 121 fails on the run that first sees a vote, the bill is created with "
-    "the vote label and the 121 title (older than the vote) never replaces it afterwards",
-)
 def test_vote_label_is_replaced_once_121_recovers(db, dp):
     _add_vote_for_8516(dp)
     inject(dp, "datapublic-121", "api-500")

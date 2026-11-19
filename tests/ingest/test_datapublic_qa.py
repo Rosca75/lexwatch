@@ -198,11 +198,6 @@ def test_112_vide_status_is_none_and_unknown_status_is_other():
     assert recs["8501"].author is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: a truncated 112 download (cut inside a quoted cell) is parsed silently; the "
-    "last bill gets a truncated title and author=None instead of a SourceError / row dropped",
-)
 def test_112_truncated_download_does_not_yield_truncated_title():
     content = SAMPLE_112.read_bytes()
     full = by_number(parse_112_csv(content, TS))
@@ -318,11 +313,6 @@ def test_121_renamed_required_column_is_a_source_error(renamed):
     assert renamed in str(err.value)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: renaming a 121 column the parser reads but does not list as required "
-    "(Auteurs, DispVote, Comm, Rapporteur...) is not detected; data silently disappears",
-)
 @pytest.mark.parametrize("renamed", ["Auteurs", "DispVote"])
 def test_121_renamed_used_column_is_a_source_error(renamed):
     content = xlsx_bytes(mutate=rename_121_header(renamed, renamed + " (v2)"))
@@ -491,11 +481,6 @@ def test_api_invalid_json_is_a_source_error(dp):
         Dataset112Adapter(API, 0).fetch(dp.client())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: valid JSON that is not an object (e.g. a list) raises AttributeError, "
-    "not SourceError with a clear message",
-)
 @pytest.mark.parametrize("payload", [[], "maintenance", 42])
 def test_api_json_not_an_object_is_a_source_error(dp, payload):
     def handler(request):
