@@ -1,0 +1,121 @@
+{
+  "acronym": "121",
+  "archived": null,
+  "badges": [],
+  "contact_point": null,
+  "created_at": "2025-04-10T09:40:33.928000+00:00",
+  "deleted": null,
+  "description": "Ce rapport a pour objectif de donner la situation de tous les dossiers Parlementaires qui ont été introduis depuis le début de la législature 2018-2023.\nCes dossiers sont notamment les Projets de loi / Proposition de loi / etc...\nDes accès directs sur les différents documents sont offerts.\nCes documents sont par ailleurs évidemment consultables sur le site public.\nLa nomenclature des colonnes est disponible dans l'onglet \"LISTE_COLONNES\".",
+  "extras": {},
+  "frequency": "unknown",
+  "frequency_date": null,
+  "harvest": null,
+  "id": "67f775f1adf67ff4c46f1b37",
+  "internal": {
+    "created_at_internal": "2025-04-10T09:40:33.928000+00:00",
+    "last_modified_internal": "2026-05-05T06:20:06.533000+00:00"
+  },
+  "last_modified": "2026-05-05T06:20:06.533000+00:00",
+  "last_update": "2025-04-10T09:41:52.258000+00:00",
+  "license": "cc-zero",
+  "metrics": {
+    "discussions": 0,
+    "followers": 0,
+    "resources_downloads": 0,
+    "reuses": 0,
+    "views": 21
+  },
+  "organization": {
+    "acronym": "CHD",
+    "badges": [
+      {
+        "kind": "certified"
+      },
+      {
+        "kind": "public-service"
+      }
+    ],
+    "class": "Organization",
+    "id": "627e56d3a9bc6b2dd946a3ea",
+    "logo": "https://download.data.public.lu/avatars/e4/80221b90df41b5bcaab9338ac653de-original.jpg",
+    "logo_thumbnail": "https://download.data.public.lu/avatars/e4/80221b90df41b5bcaab9338ac653de-100.jpg",
+    "name": "Chambre des Députés du Grand-Duché de Luxembourg",
+    "page": "https://data.public.lu/fr/organizations/chambre-des-deputes-du-grand-duche-de-luxembourg/",
+    "slug": "chambre-des-deputes-du-grand-duche-de-luxembourg",
+    "uri": "https://data.public.lu/api/1/organizations/chambre-des-deputes-du-grand-duche-de-luxembourg/"
+  },
+  "owner": null,
+  "page": "https://data.public.lu/fr/datasets/etat-des-travaux/",
+  "private": false,
+  "quality": {
+    "all_resources_available": true,
+    "dataset_description_quality": true,
+    "has_open_format": false,
+    "has_resources": true,
+    "license": true,
+    "resources_documentation": false,
+    "score": 0.3333333333333333,
+    "spatial": false,
+    "temporal_coverage": false,
+    "update_frequency": false
+  },
+  "resources": [
+    {
+      "checksum": {
+        "type": "sha1",
+        "value": "e991207c0d6c1a471d48375d59156bbb06fb1a01"
+      },
+      "created_at": "2025-04-10T09:41:41.836000+00:00",
+      "description": null,
+      "extras": {
+        "analysis:checksum": "e991207c0d6c1a471d48375d59156bbb06fb1a01",
+        "analysis:content-length": 914034,
+        "analysis:last-modified-at": "2025-04-10T07:41:42+00:00",
+        "analysis:last-modified-detection": "last-modified-header",
+        "analysis:mime-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "analysis:parsing:finished_at": "2025-07-22T21:29:54.544130+00:00",
+        "analysis:parsing:started_at": "2025-07-22T21:29:46.658006+00:00",
+        "check:date": "2025-07-22T21:20:12.091596+00:00",
+        "check:headers:content-length": 914034,
+        "check:headers:content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "check:status": 200,
+        "check:timeout": false
+      },
+      "filesize": 914034,
+      "filetype": "file",
+      "format": "xlsx",
+      "harvest": null,
+      "id": "8d8bf90f-aba9-4928-98bb-66bbdc3bae6b",
+      "internal": {
+        "created_at_internal": "2025-04-10T09:41:41.836000+00:00",
+        "last_modified_internal": "2025-04-10T09:41:52.258000+00:00"
+      },
+      "last_modified": "2025-04-10T09:41:52.258000+00:00",
+      "latest": "https://data.public.lu/fr/datasets/r/8d8bf90f-aba9-4928-98bb-66bbdc3bae6b",
+      "metrics": {
+        "views": 1
+      },
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "preview_url": null,
+      "schema": {
+        "name": null,
+        "url": null,
+        "version": null
+      },
+      "title": "121-etat-travaux.xlsx",
+      "type": "main",
+      "url": "https://download.data.public.lu/resources/etat-des-travaux-de-la-chambre-des-deputes-du-luxembourg-121/20250410-094141/121-etat-travaux.xlsx"
+    }
+  ],
+  "schema": null,
+  "slug": "etat-des-travaux",
+  "spatial": null,
+  "tags": [
+    "etat",
+    "loi",
+    "travaux-de-la-chambre"
+  ],
+  "temporal_coverage": null,
+  "title": "Etat des travaux",
+  "uri": "https://data.public.lu/api/1/datasets/etat-des-travaux/"
+}

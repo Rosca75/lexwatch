@@ -1,0 +1,251 @@
+{
+  "acronym": "112",
+  "archived": null,
+  "badges": [],
+  "contact_point": null,
+  "created_at": "2023-01-17T12:36:47.888000+00:00",
+  "deleted": null,
+  "description": "Ce rapport a pour objectif de lister les textes de lois de la Chambre des Députés du Luxembourg.\n\nIl contient :\n-\tLe numéro du texte de loi (law_number)\n-\tLe type du texte de loi (law_type)\n-\tLa date de dépôt (law_deposit_date)\n-\tLa date d’évacuation (law_evacuation_date)\n-\tLe statut (law_status)\n-\tLe titre de la lois (law_title)\n-\tLe contenu (law_content)\n-\tLe(s) auteur(s) (law_authors)\n\nLe rapport des textes de loi est disponible dans les formats suivants : \n-\tXLS\n-\tCSV\n-\tXML\n-\tHTML",
+  "extras": {},
+  "frequency": "unknown",
+  "frequency_date": null,
+  "harvest": null,
+  "id": "63c6884fcfa8113ec4793d13",
+  "internal": {
+    "created_at_internal": "2023-01-17T12:36:47.888000+00:00",
+    "last_modified_internal": "2026-05-05T06:19:12.264000+00:00"
+  },
+  "last_modified": "2026-05-05T06:19:12.264000+00:00",
+  "last_update": "2024-07-15T14:38:35.877000+00:00",
+  "license": "cc-zero",
+  "metrics": {
+    "discussions": 0,
+    "followers": 0,
+    "resources_downloads": 0,
+    "reuses": 0,
+    "views": 165
+  },
+  "organization": {
+    "acronym": "CHD",
+    "badges": [
+      {
+        "kind": "certified"
+      },
+      {
+        "kind": "public-service"
+      }
+    ],
+    "class": "Organization",
+    "id": "627e56d3a9bc6b2dd946a3ea",
+    "logo": "https://download.data.public.lu/avatars/e4/80221b90df41b5bcaab9338ac653de-original.jpg",
+    "logo_thumbnail": "https://download.data.public.lu/avatars/e4/80221b90df41b5bcaab9338ac653de-100.jpg",
+    "name": "Chambre des Députés du Grand-Duché de Luxembourg",
+    "page": "https://data.public.lu/fr/organizations/chambre-des-deputes-du-grand-duche-de-luxembourg/",
+    "slug": "chambre-des-deputes-du-grand-duche-de-luxembourg",
+    "uri": "https://data.public.lu/api/1/organizations/chambre-des-deputes-du-grand-duche-de-luxembourg/"
+  },
+  "owner": null,
+  "page": "https://data.public.lu/fr/datasets/liste-des-projets-et-propositions-de-lois/",
+  "private": false,
+  "quality": {
+    "all_resources_available": true,
+    "dataset_description_quality": true,
+    "has_open_format": true,
+    "has_resources": true,
+    "license": true,
+    "resources_documentation": false,
+    "score": 0.4444444444444444,
+    "spatial": false,
+    "temporal_coverage": false,
+    "update_frequency": false
+  },
+  "resources": [
+    {
+      "checksum": {
+        "type": "sha1",
+        "value": "7564765519ab74c13eedfe881a626128f9affd79"
+      },
+      "created_at": "2023-01-17T12:37:15.281000+00:00",
+      "description": null,
+      "extras": {
+        "analysis:checksum": "7564765519ab74c13eedfe881a626128f9affd79",
+        "analysis:content-length": 629978,
+        "analysis:last-modified-at": "2024-07-15T12:37:59+00:00",
+        "analysis:last-modified-detection": "last-modified-header",
+        "analysis:mime-type": "application/zip",
+        "check:date": "2025-07-23T19:27:00.299845+00:00",
+        "check:headers:content-length": 629978,
+        "check:headers:content-type": "application/zip",
+        "check:status": 200,
+        "check:timeout": false
+      },
+      "filesize": 629978,
+      "filetype": "file",
+      "format": "zip",
+      "harvest": null,
+      "id": "3117bb79-2f1d-4a12-9148-bc6f657ab75d",
+      "internal": {
+        "created_at_internal": "2023-01-17T12:37:15.281000+00:00",
+        "last_modified_internal": "2024-07-15T14:38:00.137000+00:00"
+      },
+      "last_modified": "2024-07-15T14:38:00.137000+00:00",
+      "latest": "https://data.public.lu/fr/datasets/r/3117bb79-2f1d-4a12-9148-bc6f657ab75d",
+      "metrics": {
+        "views": 2
+      },
+      "mime": "application/zip",
+      "preview_url": null,
+      "schema": {
+        "name": null,
+        "url": null,
+        "version": null
+      },
+      "title": "112-texte-loi.zip",
+      "type": "main",
+      "url": "https://download.data.public.lu/resources/la-liste-des-projets-propositions-de-lois/20240715-143758/112-texte-loi.zip"
+    },
+    {
+      "checksum": {
+        "type": "sha1",
+        "value": "cd0777ba5189a0e08e966ef2b159f2324b1e3361"
+      },
+      "created_at": "2023-01-17T12:37:09.558000+00:00",
+      "description": null,
+      "extras": {
+        "analysis:checksum": "cd0777ba5189a0e08e966ef2b159f2324b1e3361",
+        "analysis:content-length": 4076127,
+        "analysis:last-modified-at": "2024-07-15T12:38:10+00:00",
+        "analysis:last-modified-detection": "last-modified-header",
+        "analysis:mime-type": "text/xml",
+        "check:date": "2025-11-25T19:42:53.114858+00:00",
+        "check:headers:content-length": 4076127,
+        "check:headers:content-type": "application/xml",
+        "check:status": 200,
+        "check:timeout": false
+      },
+      "filesize": 4076127,
+      "filetype": "file",
+      "format": "xml",
+      "harvest": null,
+      "id": "c5a74c97-a5fa-42ec-90d7-a832ab7410b2",
+      "internal": {
+        "created_at_internal": "2023-01-17T12:37:09.558000+00:00",
+        "last_modified_internal": "2024-07-15T14:38:11.183000+00:00"
+      },
+      "last_modified": "2024-07-15T14:38:11.183000+00:00",
+      "latest": "https://data.public.lu/fr/datasets/r/c5a74c97-a5fa-42ec-90d7-a832ab7410b2",
+      "metrics": {
+        "views": 1
+      },
+      "mime": "application/xml",
+      "preview_url": null,
+      "schema": {
+        "name": null,
+        "url": null,
+        "version": null
+      },
+      "title": "112-texte-loi.xml",
+      "type": "main",
+      "url": "https://download.data.public.lu/resources/la-liste-des-projets-propositions-de-lois/20240715-143808/112-texte-loi.xml"
+    },
+    {
+      "checksum": {
+        "type": "sha1",
+        "value": "a7f70b4976609e6a4a2ce8a93c8b8382e56c619c"
+      },
+      "created_at": "2023-01-17T12:37:02.193000+00:00",
+      "description": null,
+      "extras": {
+        "analysis:checksum": "a7f70b4976609e6a4a2ce8a93c8b8382e56c619c",
+        "analysis:content-length": 614822,
+        "analysis:last-modified-at": "2024-07-15T12:38:24+00:00",
+        "analysis:last-modified-detection": "last-modified-header",
+        "analysis:mime-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "analysis:parsing:finished_at": "2025-07-23T04:57:55.787889+00:00",
+        "analysis:parsing:started_at": "2025-07-23T04:57:51.304880+00:00",
+        "check:date": "2025-07-23T04:56:54.198849+00:00",
+        "check:headers:content-length": 614822,
+        "check:headers:content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "check:status": 200,
+        "check:timeout": false
+      },
+      "filesize": 614822,
+      "filetype": "file",
+      "format": "xlsx",
+      "harvest": null,
+      "id": "c1c1aaee-bd13-4164-b73b-3b834f47d675",
+      "internal": {
+        "created_at_internal": "2023-01-17T12:37:02.193000+00:00",
+        "last_modified_internal": "2024-07-15T14:38:25.431000+00:00"
+      },
+      "last_modified": "2024-07-15T14:38:25.431000+00:00",
+      "latest": "https://data.public.lu/fr/datasets/r/c1c1aaee-bd13-4164-b73b-3b834f47d675",
+      "metrics": {
+        "views": 3
+      },
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "preview_url": null,
+      "schema": {
+        "name": null,
+        "url": null,
+        "version": null
+      },
+      "title": "112-texte-loi.xlsx",
+      "type": "main",
+      "url": "https://download.data.public.lu/resources/la-liste-des-projets-propositions-de-lois/20240715-143823/112-texte-loi.xlsx"
+    },
+    {
+      "checksum": {
+        "type": "sha1",
+        "value": "cd8e53c27c318fc09b4af0523520ce149cf4bed4"
+      },
+      "created_at": "2023-01-17T12:36:53.247000+00:00",
+      "description": null,
+      "extras": {
+        "analysis:checksum": "cd8e53c27c318fc09b4af0523520ce149cf4bed4",
+        "analysis:content-length": 4546489,
+        "analysis:last-modified-at": "2024-07-15T12:38:35+00:00",
+        "analysis:last-modified-detection": "last-modified-header",
+        "analysis:mime-type": "text/csv",
+        "analysis:parsing:finished_at": "2025-07-30T15:23:08.993860+00:00",
+        "analysis:parsing:started_at": "2025-07-30T15:23:05.462996+00:00",
+        "check:date": "2025-10-08T15:20:27.164497+00:00",
+        "check:headers:content-length": 4546489,
+        "check:headers:content-type": "text/csv",
+        "check:status": 200,
+        "check:timeout": false
+      },
+      "filesize": 4546489,
+      "filetype": "file",
+      "format": "csv",
+      "harvest": null,
+      "id": "0a85459a-7a17-4d84-bd72-a95347be688d",
+      "internal": {
+        "created_at_internal": "2023-01-17T12:36:53.247000+00:00",
+        "last_modified_internal": "2024-07-15T14:38:35.877000+00:00"
+      },
+      "last_modified": "2024-07-15T14:38:35.877000+00:00",
+      "latest": "https://data.public.lu/fr/datasets/r/0a85459a-7a17-4d84-bd72-a95347be688d",
+      "metrics": {
+        "views": 2
+      },
+      "mime": "text/csv",
+      "preview_url": null,
+      "schema": {
+        "name": null,
+        "url": null,
+        "version": null
+      },
+      "title": "112-texte-loi.csv",
+      "type": "main",
+      "url": "https://download.data.public.lu/resources/la-liste-des-projets-propositions-de-lois/20240715-143833/112-texte-loi.csv"
+    }
+  ],
+  "schema": null,
+  "slug": "liste-des-projets-et-propositions-de-lois",
+  "spatial": null,
+  "tags": [],
+  "temporal_coverage": null,
+  "title": "Liste des projets et propositions de lois",
+  "uri": "https://data.public.lu/api/1/datasets/liste-des-projets-et-propositions-de-lois/"
+}
