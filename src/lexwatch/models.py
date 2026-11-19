@@ -261,3 +261,23 @@ class Run(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     # Free-form per-step status, e.g. {"sources": {"chd": {"status": "failed", "error": "..."}}}
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+
+
+# --- ingestion stream (stream 1) -------------------------------------------------------------
+
+SOURCE_STATUSES = ("ok", "unchanged", "failed", "skipped")
+
+
+class SourceState(Base):
+    """Last fetch of each source adapter, used to skip unchanged downloads (migration 0002)."""
+
+    __tablename__ = "source_state"
+    __table_args__ = (CheckConstraint(_in("status", SOURCE_STATUSES), name="status"),)
+
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)  # adapter name
+    resource_id: Mapped[str | None] = mapped_column(String(64))
+    last_modified: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checksum: Mapped[str | None] = mapped_column(String(160))  # "<algo>:<hex>"
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), default="ok", server_default="ok")
+    error: Mapped[str | None] = mapped_column(Text)
