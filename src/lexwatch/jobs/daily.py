@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lexwatch.config import Settings
@@ -30,12 +31,51 @@ def create_run(session: Session, kind: str, requested_by: int | None = None) -> 
     return run
 
 
+INGEST_KINDS = ("daily", "manual")
+
+
+def carries_bootstrap(session: Session, run: Run) -> bool:
+    """True when ``run`` must also count as a bootstrap run for the digest.
+
+    That is the case when the most recent earlier daily/manual run was a bootstrap run that
+    did not finish with ``success`` and did not complete its scoring step
+    (``details["scoring_complete"]``): the run that finishes the initial scoring (or the next
+    one, if that one is interrupted too) computes the first matches of every historical bill,
+    and those must not be reported as news. A bootstrap run that scored everything but had a
+    failing source or digest does not carry the flag (otherwise a source that keeps failing
+    would suppress digests forever).
+    """
+    stmt = (
+        select(Run)
+        .where(
+            Run.kind.in_(INGEST_KINDS),
+            Run.id != run.id,
+            Run.started_at.is_not(None),
+            Run.status != "queued",
+        )
+        .order_by(Run.started_at.desc(), Run.id.desc())
+        .limit(1)
+    )
+    if run.started_at is not None:
+        stmt = stmt.where(Run.started_at <= run.started_at)
+    previous = session.scalars(stmt).first()
+    if previous is None:
+        return False
+    details = previous.details or {}
+    return (
+        bool(details.get("bootstrap"))
+        and previous.status != "success"
+        and not details.get("scoring_complete")
+    )
+
+
 def execute_run(session: Session, run: Run, settings: Settings) -> Run:
     """Execute an existing run row: ingestion, scoring, digests; finalize status and counters.
 
     Commits after each step so the admin page shows progress, and during scoring after each
     batch (``details["progress"]``). An ingestion into an empty ``bills`` table is marked
     ``details["bootstrap"] = true`` by ``run_ingestion``: the digest ignores what it added.
+    A run that follows an interrupted bootstrap run carries the flag (``carries_bootstrap``).
     """
     from lexwatch.ingest.pipeline import run_ingestion
     from lexwatch.notify.digest import send_digests_report
@@ -44,6 +84,9 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
 
     run.status = "running"
     run.started_at = utcnow()
+    if run.kind in INGEST_KINDS and carries_bootstrap(session, run):
+        run.details = {**(run.details or {}), "bootstrap": True}
+        log.info("job.bootstrap_carried", extra={"run_id": run.id})
     session.commit()
 
     errors: dict[str, str] = {}
@@ -73,6 +116,7 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
             errors["scoring"] = scored.error
         else:
             steps_ok += 1
+            run.details = {**(run.details or {}), "scoring_complete": True}
         session.commit()
     except Exception as exc:
         session.rollback()

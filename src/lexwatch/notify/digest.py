@@ -16,7 +16,9 @@ already).
 Bootstrap runs: the first ingestion into an empty ``bills`` table records
 ``runs.details["bootstrap"] = true`` (``ingest.pipeline``). Timestamps that fall inside such a
 run (``started_at`` to ``finished_at``, or now while it is running) are ignored, so a fresh
-install does not report every historical bill as new; only later changes count.
+install does not report every historical bill as new; only later changes count. A run that
+follows an interrupted bootstrap run (scoring not completed) carries the flag
+(``jobs.daily.carries_bootstrap``), so the run that computes the first matches is ignored too.
 
 Bills are listed newest first (bill number descending, ``models.bill_recency_order``). Scores
 use the owner's language decimal separator; titles are cut to ``TITLE_MAX`` characters, and a

@@ -322,8 +322,11 @@ Run status lifecycle: `queued -> running -> success | partial | failed`. Per-sou
 detail goes in `runs.details`, for example
 `{"sources": {"chd": {"status": "failed", "error": "..."}}, "digests_sent": 2, "digests_failed": 0, "digests_skipped": 5, "billing": {"unit": "input_tokens"}}`.
 A failed digest makes the digest step fail (run `partial`); the counts are kept.
-`"bootstrap": true` marks the run whose ingestion filled an empty `bills` table; the digest
-ignores timestamps inside that run's window, and a profile's first digest only lists changes
+`"bootstrap": true` marks the run whose ingestion filled an empty `bills` table, and also a
+daily/manual run whose most recent earlier daily/manual run was a bootstrap run that did not
+finish with `success` nor complete its scoring (`"scoring_complete": true`), so the run that
+finishes the initial scoring after an interruption counts too; the digest ignores timestamps
+(bill first seen / last changed, match computed) inside those runs' windows, and a profile's first digest only lists changes
 after the profile was created.
 The admin page reads `status`, `error_message` and `details`. The monthly cost is
 `sum(billed_units)` over `runs.started_at` in the current month, preview runs included.
