@@ -108,7 +108,7 @@ lists them all with comments. An empty value means "use the default".
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `lexwatch` each (in compose) | Used by the `db` container. Compose builds `DATABASE_URL` from them. Set a real password. |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `lexwatch` (user, database); password required | Used by the `db` container. Compose builds `DATABASE_URL` from them and refuses to start without `POSTGRES_PASSWORD` (URL-safe characters). |
 | `DATABASE_URL` | `postgresql+psycopg://lexwatch:lexwatch@localhost:5432/lexwatch` | Set it yourself only outside compose (compose overrides it). |
 | `APP_PORT` | `8000` | Host port of the `app` container. |
 | `LEXWATCH_TAG` | `latest` | Tag of the locally built image (compose only). |
