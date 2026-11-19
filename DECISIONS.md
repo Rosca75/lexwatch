@@ -74,3 +74,40 @@ Format: date — decision. *Reason.* Alternatives considered.
   fallback.
 - **2026-11-19 — Billed units.** v5 reports `input_tokens`, v4 reports `search_units`. `runs.billed_units` stores the
   number and `runs.details.billing.unit` the unit; the admin page sums the current month.
+- **2026-11-19 — Text sent to the scorer.** Neither dataset has a summary or "objet" field (112's `LAW_CONTENT` is a
+  list of filed documents). The scored text is therefore the bill title, then the summary when a future source
+  provides one, then `Auteur : <author/ministry>` — the ministry line helps rules such as "finances" or "santé".
+  Whitespace is collapsed and the text is cut to `SCORING_MAX_CHARS` (default 4000), far below the rerank context
+  limit. The exact text is stored in `bills.scored_text`. Implemented in `lexwatch/scoring/text.py`.
+- **2026-11-19 — Rule-text edits invalidate that rule's scores.** Editing a rule's text deletes its stored scores
+  (`invalidate_rule_scores`) and queues the profile for rescoring; reordering does not rescore; a threshold-only
+  change recomputes matches without any scoring call.
+- **2026-11-19 — Profile score rounding.** The plain mean is rounded to 6 decimals before comparison so that
+  e.g. (0.6 + 0.3) / 2 matches a 0.45 threshold despite floating-point error.
+- **2026-11-19 — "Newly matched" for digests** means a match row inserted or whose `matched` flag flipped;
+  `matches.computed_at` changes only then, so rescoring never re-mails the same bills.
+
+## Dependencies
+
+- **2026-11-19 — selectolax removed.** It was planned for chd.lu HTML parsing; since chd.lu is not scraped
+  (robots.txt), no HTML is parsed and the dependency was dropped. If permission to fetch dossier pages is granted,
+  use `from selectolax.lexbor import LexborHTMLParser` (selectolax 1.0 removed the old backend).
+- **2026-11-19 — numpy in the `local` extra and the dev group only.** onnxruntime takes and returns numpy arrays,
+  so the optional local scorer needs it; the default image does not install it. The dev group has it so the local
+  scorer's unit tests (mocked ONNX session) run in CI.
+- **2026-11-19 — The `models` volume is mounted in every compose setup.** Compose cannot add a volume mount to a
+  service only when a profile is active; the empty volume is harmless. The `local-scorer` profile adds the one-shot
+  `model-download` service, and `INSTALL_LOCAL_SCORER=1` installs the extra at build time.
+
+## Out of scope, with a path forward
+
+- **Explaining why a bill matched with an LLM (not built).** Today the per-rule scores on hover show *which* rules
+  drove a match. A later version could, only for matched bills, send the bill title/summary and the profile's rules
+  to a generative model on Foundry and store a two-sentence explanation in a new `match_explanations` table
+  (profile, bill, model, text, created_at), generated in the daily job after scoring and shown on the bill page.
+  Keep it optional, cache it per (bill text hash, rules hash), and never send user data.
+- **Following bills after they become law (Legilux, not built).** Published laws are on legilux.public.lu, which
+  exposes an ELI-based SPARQL endpoint and per-act metadata. A `legilux` source adapter could, for bills with
+  status `published`, look up the act whose travaux préparatoires reference the dossier number, store the ELI URI
+  in `bills.extra["eli"]`, and add a `law_published` event; amendments to that act could later be tracked as their
+  own items. It fits the existing adapter + merge design without schema changes.
