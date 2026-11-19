@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import secrets
 from datetime import UTC, datetime
+from urllib.parse import urlencode
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
@@ -35,8 +36,27 @@ DEV_USERS = {
 }
 
 
+INT32_MAX = 2**31 - 1  # users.id is a PostgreSQL integer
+
+
 class NotAuthenticated(Exception):
-    pass
+    """Raised by ``require_user``. ``login_url`` is ``/login?next=<requested local path>``."""
+
+    def __init__(self, login_url: str = "/login") -> None:
+        super().__init__(login_url)
+        self.login_url = login_url
+
+
+def login_url_for(request: Request) -> str:
+    """``/login`` with ``next`` set to the requested path (GET only; local paths only)."""
+    if request.method != "GET" or request.headers.get("HX-Request"):
+        return "/login"
+    path = request.url.path
+    if request.url.query:
+        path += "?" + request.url.query
+    if not path.startswith("/") or path.startswith(("//", "/\\")) or path == "/":
+        return "/login"
+    return "/login?" + urlencode({"next": path})
 
 
 def utcnow() -> datetime:
@@ -98,7 +118,8 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User | None
     user: User | None = None
     user_id = request.session.get(SESSION_USER_KEY)
     if user_id is not None:
-        user = db.get(User, user_id) if isinstance(user_id, int) else None
+        valid = type(user_id) is int and 0 < user_id <= INT32_MAX
+        user = db.get(User, user_id) if valid else None
         if user is None:
             # Deleted user (or unexpected value): invalidate the whole session.
             log.info("auth.session_invalidated", extra={"user_id": user_id})
@@ -111,9 +132,9 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User | None
     return user
 
 
-def require_user(user: User | None = Depends(current_user)) -> User:
+def require_user(request: Request, user: User | None = Depends(current_user)) -> User:
     if user is None:
-        raise NotAuthenticated()
+        raise NotAuthenticated(login_url_for(request))
     return user
 
 

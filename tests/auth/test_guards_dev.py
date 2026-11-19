@@ -206,3 +206,33 @@ def test_csrf_origin_check(logged_in):
 
 def test_csrf_not_required_for_safe_methods(logged_in):
     assert logged_in.get("/_t/user").status_code == 200
+
+
+@pytest.mark.parametrize("bad", [2**31, 2**63, 10**30, -1, 0, "1", True, 1.5])
+def test_out_of_range_or_bad_user_id_is_invalid_session(db, bad):
+    app = build_app(oidc_settings(), db)
+    with open_client(app) as client:
+        client.get("/logged-out")
+        write_session(client, {SESSION_USER_KEY: bad, "csrf_token": "t"})
+        response = client.get("/_t/user", follow_redirects=False)
+        assert response.status_code == 303
+        assert SESSION_USER_KEY not in read_session(client)
+
+
+def test_not_authenticated_carries_next(db):
+    from lexwatch.web.deps import NotAuthenticated, require_user
+
+    app = build_app(oidc_settings(), db)
+
+    @app.exception_handler(NotAuthenticated)
+    async def _handler(request, exc):  # what app.py should do with exc.login_url
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(exc.login_url, status_code=303)
+
+    assert require_user  # imported for clarity
+    with open_client(app) as client:
+        response = client.get("/_t/user?x=1", follow_redirects=False)
+        assert response.headers["location"] == "/login?next=%2F_t%2Fuser%3Fx%3D1"
+        htmx = client.get("/_t/user", headers={"HX-Request": "true"}, follow_redirects=False)
+        assert htmx.status_code in (303, 401)
