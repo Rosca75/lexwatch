@@ -468,9 +468,12 @@ def test_content_forms_have_exactly_one_primary_button(pages_both, screen):
             assert len(_primary_buttons(form)) == 1, (lang, screen, form.attrs)
 
 
-def test_admin_forms_have_exactly_one_primary_button(pages_both):
-    for form in _forms(_main(dom(pages_both["fr:admin"]))):
-        assert len(_primary_buttons(form)) == 1, form.attrs
+def test_admin_page_has_exactly_one_primary_button(pages_both):
+    """ "Run now" is the primary action; "Rescore all" is a quieter secondary button."""
+    forms = _forms(_main(dom(pages_both["fr:admin"])))
+    assert sum(len(_primary_buttons(form)) for form in forms) == 1
+    primary = next(f for f in forms if _primary_buttons(f))
+    assert primary.attrs.get("action") == "/admin/run"
 
 
 def test_every_field_has_a_label(pages_both):

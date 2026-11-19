@@ -34,7 +34,9 @@ progress:
 
 The same steps run for a manual run (admin "Run now", or `lexwatch run-job`).
 
-**Run kinds:** `daily`, `manual` (Run now, `run-job`), `rescore` (one per profile rescore).
+**Run kinds:** `daily`, `manual` (Run now, `run-job`), `rescore` (one per profile rescore, or
+one for a whole "Rescore all"), `preview` (a Rules preview that sent scoring requests; counted
+in the monthly billed units, not listed on the admin page).
 
 **Run states:** `queued` (Run now, waiting for the worker) → `running` → one of:
 
@@ -65,10 +67,12 @@ docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
 ## Monitoring
 
 **Admin page** (`/admin`, admin role): the last 20 runs (time, duration, kind, status, counts,
-billed units, errors), the source statuses of the latest ingestion, the number of bills, of
-pending and unscored bills, of rule scores from another model than the configured one, of
-profiles being rescored, and the billed units of the current month. The buttons "Run now" and
-"Rescore all" queue work for the worker. CSV export of bills and matches is there too.
+billed units, errors; preview runs are not listed), the source statuses of the latest
+ingestion, the billed units of the current month (previews included), and, only when not zero,
+the number of unscored bills, of rule scores from another model than the configured one, and of
+profiles being rescored. "Run now" queues a run for the worker. "Rescore all" queues a forced
+rescore: every bill is sent to the scoring endpoint again for every profile, which costs
+money (see below). CSV export of bills and matches is there too.
 
 **Probes.**
 
@@ -207,13 +211,14 @@ Every rule score stores the model that produced it. Scores from another model co
 4. Rescore. Any of these works:
    - wait for the next daily run: it scores every pair that has no current-model score, so it
      rescores everything;
-   - admin page, **Rescore all**, or `lexwatch rescore --all`: queues every profile for the
-     worker;
+   - admin page, **Rescore all**, or `lexwatch rescore --all`: queues one forced rescore of
+     every profile for the worker (every bill is sent again, even with current scores);
    - `docker compose exec worker lexwatch rescore`: rescores every profile now, in that process,
      printing one line per profile (`--profile ID` for one). Exit code 1 if a rescore failed or
      was partial.
 
-   Each profile rescore is a `rescore` run with its own billed units. Until it finishes, bills
+   Each profile rescore is a `rescore` run with its own billed units ("Rescore all" is one
+   `rescore` run for all profiles). Until it finishes, bills
    whose scores are stale keep their previous match. The admin page shows how many stale rule
    scores are left; it should reach 0.
 5. **Re-check thresholds.** Default thresholds follow the model: 0.45 for Rerank 5 Fast, 0.5 for
@@ -222,6 +227,13 @@ Every rule score stores the model that produced it. Scores from another model co
    with their own threshold keep it whatever the model. After the rescore, open the main
    profiles, use the Rules preview to compare matches, and adjust. A `DEFAULT_THRESHOLD` set
    in `.env` applies to every model; review it too.
+
+**Changing the default threshold.** Set `DEFAULT_THRESHOLD` in `.env` (or leave it empty to use
+the scorer's default) and restart the worker (`docker compose up -d worker`). At startup the
+worker recomputes the matches of every profile that has no threshold of its own, from the
+stored scores: no scoring request, no cost. Profiles with their own threshold are not touched.
+The app reads the new default for the Rules page after its own restart (`docker compose up -d`
+restarts both). Bills that newly match appear in the next digest.
 
 Bills that newly match after the switch appear in the next digest.
 
@@ -302,7 +314,8 @@ Stopping the worker (`docker compose stop`, deploy, crash) is safe:
 
 - On start, it migrates the database, then cleans up: runs left `running` become `failed` with
   `interrupted (worker restarted)`, and profiles left `running` (rescore) go back to `pending`
-  and are rescored again.
+  and are rescored again. It then recomputes the matches of profiles using the default
+  threshold (see "Changing the default threshold").
 - Queued runs ("Run now") stay queued and are picked up.
 - Data from completed steps is kept (each step commits). Bills that were being scored keep
   their state and are scored by the next run.
@@ -327,7 +340,7 @@ except `migrate` and `download-model`. Inside a running container use
 | `worker` | run the worker loop (daily job, queued runs, pending rescores) until SIGTERM |
 | `run-job` | run ingestion, scoring and digests once, now, in this process (a `manual` run) |
 | `rescore [--profile ID]` | rescore every profile (or one) now, in this process; only pairs without a current-model score are sent; exit 1 on a failed or partial rescore |
-| `rescore --all` | queue every profile for the worker (like "Rescore all"), score nothing here |
+| `rescore --all` | queue a forced rescore of every profile for the worker (like "Rescore all"), score nothing here |
 | `download-model` | download the local ONNX model and tokenizer into `LOCAL_MODEL_DIR` (needs `INSTALL_LOCAL_SCORER=1` image) |
 | `send-digest [--dry-run]` | build and send digests now; `--dry-run` prints them and changes nothing |
 

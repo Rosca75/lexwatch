@@ -1,8 +1,11 @@
 """Admin page (stream 3): last runs, Run now, Rescore all, CSV export, monthly billed units.
 
 "Run now" inserts a ``runs`` row with ``kind='manual', status='queued'`` (see
-``jobs.daily.create_run``); "Rescore all" sets every profile's ``rescore_status='pending'``.
-The worker picks both up. CSV exports are UTF-8 with a BOM so Excel opens them correctly.
+``jobs.daily.create_run``); "Rescore all" queues a forced rescore of every profile
+(``jobs.rescore.queue_rescore_all``: a queued ``rescore`` run with ``{"force": true}``, and
+every idle profile set to ``pending``). The worker picks both up. Preview runs
+(``kind='preview'``) count in the monthly billed units but are not listed. CSV exports are
+UTF-8 with a BOM so Excel opens them correctly.
 """
 
 from __future__ import annotations
@@ -17,15 +20,17 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from lexwatch.db import get_db
+from lexwatch.i18n import t
 from lexwatch.jobs.daily import create_run
+from lexwatch.jobs.rescore import queue_rescore_all
 from lexwatch.models import Bill, Match, Profile, Run, User
 from lexwatch.scoring.factory import model_name_for
 from lexwatch.scoring.service import stale_score_count
-from lexwatch.web.deps import require_admin
+from lexwatch.web.deps import get_lang, require_admin
 from lexwatch.web.routes.bills import bill_order, format_dt
 from lexwatch.web.templating import render
 
@@ -50,6 +55,16 @@ def _duration(run: Run) -> str:
     return f"{minutes} min {seconds:02d} s" if minutes else f"{seconds} s"
 
 
+BILLING_UNITS = ("input_tokens", "search_units")
+
+
+def unit_label(unit: str | None, lang: str) -> str | None:
+    """Translated billing unit (``input_tokens`` -> "jetons"); unknown units stay raw."""
+    if unit in BILLING_UNITS:
+        return t(f"admin.unit.{unit}", lang)
+    return unit
+
+
 def _stale_scores(request: Request, db: Session) -> int | None:
     """Rule scores computed with another model than the configured one (None if unknown)."""
     try:
@@ -64,7 +79,12 @@ def admin_index(
     request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)
 ):
     runs = list(
-        db.scalars(select(Run).order_by(Run.created_at.desc(), Run.id.desc()).limit(RUNS_SHOWN))
+        db.scalars(
+            select(Run)
+            .where(Run.kind != "preview")
+            .order_by(Run.created_at.desc(), Run.id.desc())
+            .limit(RUNS_SHOWN)
+        )
     )
     run_rows = [
         {
@@ -107,21 +127,18 @@ def admin_index(
             unit = str(billing["unit"])
             break
 
-    state_counts = dict(
-        db.execute(select(Bill.score_state, func.count()).group_by(Bill.score_state)).all()
-    )
+    unscored = db.scalar(select(func.count()).where(Bill.score_state == "unscored")) or 0
+    lang = get_lang(request)
     context = {
         "runs": run_rows,
         "sources": sources,
         "sources_time": format_dt(sources_run.started_at or sources_run.created_at, request)
         if sources_run
         else "",
-        "bills_total": sum(state_counts.values()),
-        "bills_pending": state_counts.get("pending", 0),
-        "bills_unscored": state_counts.get("unscored", 0),
-        "stale_scores": _stale_scores(request, db),
+        "bills_unscored": unscored,
+        "stale_scores": _stale_scores(request, db) or 0,
         "month_units": month_units,
-        "unit": unit,
+        "unit": unit_label(unit, lang),
         "queued": any(r.status == "queued" for r in runs),
         "rescoring": db.scalar(
             select(func.count(Profile.id)).where(Profile.rescore_status != "idle")
@@ -133,7 +150,9 @@ def admin_index(
 
 @router.post("/run")
 def run_now(request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    already = db.scalar(select(func.count(Run.id)).where(Run.status == "queued"))
+    already = db.scalar(
+        select(func.count(Run.id)).where(Run.status == "queued", Run.kind != "rescore")
+    )
     if not already:
         run = create_run(db, "manual", requested_by=user.id)
         db.commit()
@@ -145,11 +164,11 @@ def run_now(request: Request, user: User = Depends(require_admin), db: Session =
 def rescore_all(
     request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)
 ):
-    db.execute(
-        update(Profile).where(Profile.rescore_status == "idle").values(rescore_status="pending")
+    run = queue_rescore_all(db, requested_by=user.id)
+    log.info(
+        "admin.rescore_all",
+        extra={"user_id": user.id, "run_id": run.id if run else None, "already_queued": not run},
     )
-    db.commit()
-    log.info("admin.rescore_all", extra={"user_id": user.id})
     return RedirectResponse("/admin", status_code=303)
 
 

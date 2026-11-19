@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select, update
@@ -15,7 +16,12 @@ from lexwatch.i18n import t
 from lexwatch.ingest import pipeline
 from lexwatch.jobs import worker
 from lexwatch.jobs.daily import create_run, execute_run
-from lexwatch.jobs.rescore import execute_rescore, finish_rescore_status
+from lexwatch.jobs.rescore import (
+    execute_rescore,
+    finish_rescore_status,
+    queue_rescore_all,
+    recompute_default_threshold_matches,
+)
 from lexwatch.models import Bill, Match, Profile, Rule, Run, User
 from lexwatch.notify import digest
 from lexwatch.scoring import factory, service
@@ -268,6 +274,56 @@ def test_worker_startup_recovers_interrupted_work(db, profile):
     assert worker.recover_interrupted(db) == (0, 0)
 
 
+def test_queued_rescore_all_forces_every_bill_in_one_run(db, settings, profile, monkeypatch):
+    scorer = BillingFakeScorer()
+    use_scorer(monkeypatch, scorer)
+    execute_rescore(db, settings, profile.id, scorer=scorer)  # every pair now has a score
+    assert queue_rescore_all(db, requested_by=None) is not None
+    assert queue_rescore_all(db) is None  # one queued full rescore at a time
+    db.refresh(profile)
+    assert profile.rescore_status == "pending"
+
+    calls_before = len(scorer.calls)
+    worker.tick(db, settings)
+
+    db.refresh(profile)
+    assert profile.rescore_status == "idle"
+    forced = [r for r in rescore_runs(db) if (r.details or {}).get("force")]
+    assert len(forced) == 1
+    run = forced[0]
+    assert run.status == "success" and run.details["profiles"] == 1
+    # Forced: every bill was sent again although all scores were current.
+    sent = sum(n for _, n in scorer.calls[calls_before:])
+    assert sent == db.scalar(select(func.count(Bill.number)))
+    assert run.billed_units >= 1 and run.bills_scored == sent
+    # The pending flag set by "Rescore all" was consumed by the forced run (no extra run).
+    worker.tick(db, settings)
+    assert len(rescore_runs(db)) == 2
+
+
+def test_worker_startup_recomputes_default_threshold_matches(db, settings, profile, monkeypatch):
+    scorer = FakeScorer(default_threshold=0.01)
+    use_scorer(monkeypatch, scorer)
+    execute_rescore(db, settings, profile.id, scorer=scorer)
+    match = db.scalar(select(Match).where(Match.bill_number == "9002"))  # fake score 0
+    assert match is not None and match.matched is False
+
+    # The operator lowers DEFAULT_THRESHOLD to 0; no scoring request is made.
+    calls = len(scorer.calls)
+    lowered = replace(settings, default_threshold=0.0, default_threshold_explicit=True)
+    assert recompute_default_threshold_matches(db, lowered) == 1
+    db.refresh(match)
+    assert match.matched is True
+    assert len(scorer.calls) == calls
+
+    # A profile with its own threshold is left alone.
+    profile.threshold = Decimal("0.500")
+    db.flush()
+    assert recompute_default_threshold_matches(db, settings) == 0
+    db.refresh(match)
+    assert match.matched is True
+
+
 # -- 2b. CLI rescore ----------------------------------------------------------------------------
 
 
@@ -304,12 +360,16 @@ def test_cli_rescore_unknown_profile_exits_1(cli_db, settings, monkeypatch):
     assert run_cli(settings, monkeypatch, ["rescore", "--profile", "999999"]) == 1
 
 
-def test_cli_rescore_all_queues_profiles(cli_db, settings, profile, monkeypatch, capsys):
+def test_cli_rescore_all_queues_forced_rescore(cli_db, settings, profile, monkeypatch, capsys):
     assert run_cli(settings, monkeypatch, ["rescore", "--all"]) == 0
     cli_db.refresh(profile)
     assert profile.rescore_status == "pending"
-    assert rescore_runs(cli_db) == []
+    (run,) = rescore_runs(cli_db)
+    assert (run.status, run.details) == ("queued", {"force": True})
     assert "queued" in capsys.readouterr().out
+    # A second call does not queue another one.
+    assert run_cli(settings, monkeypatch, ["rescore", "--all"]) == 0
+    assert len(rescore_runs(cli_db)) == 1
 
 
 def test_cli_rescore_help_documents_all(capsys):

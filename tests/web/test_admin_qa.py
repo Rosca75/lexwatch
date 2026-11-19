@@ -83,7 +83,7 @@ def test_run_now_via_htmx_header_token(admin_client, db):
 def test_queued_run_is_shown_on_admin_page(admin_client, db):
     admin_client.post("/admin/run", data={"csrf_token": csrf_token(admin_client)})
     page = admin_client.get("/admin").text
-    assert "En attente" in page or "queued" in page.lower()
+    assert "En file" in page
 
 
 # --- Rescore all --------------------------------------------------------------------------
@@ -103,8 +103,14 @@ def test_rescore_all_marks_every_profile_pending(admin_client, db):
     db.expire_all()
     for profile in profiles:
         assert db.get(Profile, profile.id).rescore_status in ("pending", "running")
-    # Rescore all does not create runs of its own (the worker picks up pending profiles).
-    assert runs(db) == [] or all(r.kind == "rescore" for r in runs(db))
+    # One queued forced rescore run, executed by the worker for every profile.
+    (run,) = runs(db)
+    assert (run.kind, run.status, run.details) == ("rescore", "queued", {"force": True})
+    assert run.requested_by == admin.id
+    # A second click while it is queued does not queue another one, and Run now still works.
+    admin_client.post("/admin/rescore", data={"csrf_token": csrf_token(admin_client)})
+    admin_client.post("/admin/run", data={"csrf_token": csrf_token(admin_client)})
+    assert sorted(r.kind for r in runs(db)) == ["manual", "rescore"]
 
 
 def test_rescore_all_does_not_reset_running_profile(admin_client, db):

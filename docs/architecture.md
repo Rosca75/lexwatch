@@ -44,7 +44,8 @@ src/lexwatch/
                    service.py (score_pending_bills, rescore_profile, compute_matches, preview)
   notify/          digest.py (Digest, build_digest, send_digests), mailer.py (smtplib)
   jobs/            daily.py (create_run, execute_run, run_daily_job), worker.py (tick, loop),
-                   rescore.py (execute_rescore, finish_rescore_status, mark_all_pending)
+                   rescore.py (execute_rescore, execute_rescore_all, queue_rescore_all,
+                   finish_rescore_status, recompute_default_threshold_matches)
   web/
     app.py         create_app(settings): middleware, static, routers, error handlers
     templating.py  Jinja env, per-request globals, render()
@@ -75,7 +76,7 @@ String columns with CHECK constraints instead of PG enums. Allowed values are ex
 | `rules` | id, profile_id FK (cascade), text, position |
 | `rule_scores` | id, rule_id FK (cascade), bill_number FK, score float, model, scored_at, unique(rule_id, bill_number) |
 | `matches` | id, profile_id FK (cascade), bill_number FK, profile_score float, matched bool, computed_at, unique(profile_id, bill_number) |
-| `runs` | id, kind `daily`/`manual`/`rescore`, status `queued`/`running`/`success`/`partial`/`failed`, requested_by FK users (SET NULL), created_at, started_at, finished_at, bills_added, bills_changed, bills_scored, bills_unscored, billed_units, error_message, details JSONB |
+| `runs` | id, kind `daily`/`manual`/`rescore`/`preview`, status `queued`/`running`/`success`/`partial`/`failed`, requested_by FK users (SET NULL), created_at, started_at, finished_at, bills_added, bills_changed, bills_scored, bills_unscored, billed_units, error_message, details JSONB |
 
 Refinements to the requested model (and why):
 
@@ -90,6 +91,10 @@ Refinements to the requested model (and why):
 - `runs.billed_units` is an integer of whatever unit the endpoint reports. Rerank v5 reports
   `input_tokens` and v4 reports `search_units` (see `docs/research/foundry-rerank.md`).
   The scoring stream records the unit name in `runs.details["billing"] = {"unit": ...}`.
+- `runs.kind='preview'` (migration 0004): a Rules preview that sent scoring requests writes one
+  row (`status='success'`, `started_at = finished_at`, `requested_by` = the user,
+  `billed_units` > 0). Previews served from stored scores or the cache write nothing. These
+  rows count in the monthly total and are hidden from the admin "last runs" table.
 
 Schema changes: models and migrations must stay in sync. `tests/test_smoke.py::
 test_models_match_migrations` fails on drift, and `uv run alembic check` does the same check.
@@ -278,24 +283,37 @@ runs `tick()`:
    `runs(kind='manual', status='queued', requested_by=user.id)` with `create_run` and commits.
    The worker claims the oldest queued run with `SELECT ... FOR UPDATE SKIP LOCKED` and
    executes it.
-3. **Pending rescores.** Saving a profile's rules or threshold sets
-   `profile.rescore_status='pending'`. "Rescore all" sets `pending` on every profile. The
-   worker claims one pending profile (`SKIP LOCKED`), sets it to `running`, calls
+3. **Pending rescores.** Saving a profile's rules sets `profile.rescore_status='pending'`
+   (a threshold-only change recomputes matches at once, without scoring). The worker claims one pending profile (`SKIP LOCKED`), sets it to `running`, calls
    `rescore_profile` inside a `runs(kind='rescore', requested_by NULL, details={"profile_id": id})`
    row (so its billed units count in the monthly cost), and then sets it back to `idle` with a
    compare-and-set (`WHERE rescore_status='running'`): a profile saved again meanwhile stays
    `pending` and is rescored once more. A failed rescore is recorded in its run and not retried
    by the worker; its unscored bills and pairs are picked up by the next daily run. The UI shows "in progress" while the
-   status is `pending` or `running` (htmx polling on the Rules page).
-4. **Model change.** When `FOUNDRY_MODEL` changes, rule scores whose `model` differs from
+   status is `pending` or `running` (htmx polling on the Rules page). A normal rescore only
+   sends pairs without a current-model score.
+4. **Rescore all (forced).** The admin button and `lexwatch rescore --all` call
+   `jobs.rescore.queue_rescore_all`: it inserts one queued run
+   `runs(kind='rescore', status='queued', requested_by=admin, details={"force": true})` (not
+   when one is already queued) and sets every idle profile to `pending` so the UI shows it in
+   progress. No schema change: the queued run carries the "force" flag. The worker claims it
+   in step 2 like any queued run and, because of its kind, executes `execute_rescore_all`:
+   each profile in turn goes `running`, is rescored with `force=True` (every bill sent again),
+   and goes back to `idle` with the same compare-and-set. Billed units, counts and errors add
+   up in that single run. "Run now" ignores a queued rescore run when checking for duplicates.
+5. **Model change.** When `FOUNDRY_MODEL` changes, rule scores whose `model` differs from
    `scorer.model_name` are stale. The operator runs `lexwatch rescore`, or uses "Rescore all".
+6. **Default threshold change.** At startup (after `recover_interrupted`) the worker runs
+   `recompute_default_threshold_matches`: matches of every profile with a NULL threshold are
+   recomputed from stored scores (no scoring request), so a new `DEFAULT_THRESHOLD` or scorer
+   default takes effect after a restart.
 
 Run status lifecycle: `queued -> running -> success | partial | failed`. Per-source and per-step
 detail goes in `runs.details`, for example
 `{"sources": {"chd": {"status": "failed", "error": "..."}}, "digests_sent": 2, "digests_failed": 0, "digests_skipped": 5, "billing": {"unit": "input_tokens"}}`.
 A failed digest makes the digest step fail (run `partial`); the counts are kept.
 The admin page reads `status`, `error_message` and `details`. The monthly cost is
-`sum(billed_units)` over `runs.started_at` in the current month.
+`sum(billed_units)` over `runs.started_at` in the current month, preview runs included.
 
 ## 6. Conventions
 

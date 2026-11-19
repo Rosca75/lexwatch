@@ -38,7 +38,7 @@ DYNAMIC = {
         "dossier_url",
         "summary",
     ),
-    "admin.runs.kind": ("daily", "manual", "rescore"),
+    "admin.runs.kind": ("daily", "manual", "rescore", "preview"),
     "admin.runs.status": ("queued", "running", "success", "partial", "failed"),
     "admin.sources.status": ("ok", "failed", "skipped"),
     "lang": ("fr", "en"),
@@ -57,6 +57,8 @@ PY_KEYS = (
     "rules.preview.failed",
     "bill.scores.rule",
     "bill.link.full_pdf",
+    "admin.unit.input_tokens",
+    "admin.unit.search_units",
 )
 
 
