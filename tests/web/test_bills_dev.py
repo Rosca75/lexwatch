@@ -63,7 +63,7 @@ def test_home_in_english(client, data):
 
 def test_home_type_labels_are_short_and_pager_has_no_arrows(client, db, data):
     for i in range(60):
-        make_bill(db, f"9{i:03d}", title=f"Projet {i}")
+        make_bill(db, f"1{i:03d}", title=f"Projet {i}")  # older numbers: page 2
     html = client.get("/?all=1").text
     assert '<td class="nowrap">Proposition</td>' in html
     assert '<td class="nowrap">Projet</td>' in html

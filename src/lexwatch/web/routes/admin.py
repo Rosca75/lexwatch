@@ -24,10 +24,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from lexwatch.db import get_db
-from lexwatch.i18n import t
+from lexwatch.i18n import format_int, t
 from lexwatch.jobs.daily import create_run
 from lexwatch.jobs.rescore import queue_rescore_all
-from lexwatch.models import Bill, Match, Profile, Run, User
+from lexwatch.models import SOURCE_STATUSES, Bill, Match, Profile, Run, User
 from lexwatch.scoring.factory import model_name_for
 from lexwatch.scoring.service import stale_score_count
 from lexwatch.web.deps import get_lang, require_admin
@@ -74,6 +74,22 @@ def _stale_scores(request: Request, db: Session) -> int | None:
     return stale_score_count(db, model)
 
 
+def run_progress(run: Run, lang: str) -> str:
+    """ "1 200 / 12 039" (scored pairs / pairs to score) for a running run, else ""."""
+    if run.status != "running":
+        return ""
+    progress = (run.details or {}).get("progress")
+    if not isinstance(progress, dict):
+        return ""
+    try:
+        done, total = int(progress["done"]), int(progress["total"])
+    except (KeyError, TypeError, ValueError):
+        return ""
+    if total <= 0:
+        return ""
+    return f"{format_int(done, lang)} / {format_int(total, lang)}"
+
+
 @router.get("")
 def admin_index(
     request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)
@@ -86,11 +102,13 @@ def admin_index(
             .limit(RUNS_SHOWN)
         )
     )
+    lang = get_lang(request)
     run_rows = [
         {
             "run": r,
             "time": format_dt(r.started_at or r.created_at, request),
             "duration": _duration(r),
+            "progress": run_progress(r, lang),
         }
         for r in runs
     ]
@@ -128,8 +146,8 @@ def admin_index(
             break
 
     unscored = db.scalar(select(func.count()).where(Bill.score_state == "unscored")) or 0
-    lang = get_lang(request)
     context = {
+        "source_statuses": SOURCE_STATUSES,
         "runs": run_rows,
         "sources": sources,
         "sources_time": format_dt(sources_run.started_at or sources_run.created_at, request)

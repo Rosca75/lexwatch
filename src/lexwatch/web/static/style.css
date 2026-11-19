@@ -139,6 +139,14 @@ td details p { margin: 0.5rem 0 0; max-width: 30rem; }
 /* New or changed since the last visit: text weight only. */
 table.bills td { font-weight: 400; }
 table.bills tr.new td { font-weight: 600; }
+/* Long titles: two lines at most; the full title is on hover (title attribute). */
+.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 
 .status { margin-left: 0.5rem; color: var(--muted); }
 
@@ -167,8 +175,11 @@ dl.meta dd { margin: 0; }
 
 footer { margin: 5rem 0 2rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: var(--size-small); }
 
-/* Subtle htmx loading indicator: the region being refreshed fades a little. */
+/* Subtle htmx loading indicator: the region being refreshed fades a little, and a short
+   text ("Calcul…") shows next to the button that started a slow request. */
 .htmx-request { opacity: 0.55; transition: opacity 150ms ease-in; }
+.htmx-indicator { display: none; }
+.htmx-request.htmx-indicator, .htmx-request .htmx-indicator { display: inline; opacity: 1; }
 
 @media (max-width: 64rem) {
   table.runs th, table.runs td { padding-right: 0.6rem; }

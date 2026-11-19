@@ -46,6 +46,13 @@ NAME_MAX = 200
 RULE_MAX = 1000
 MAX_RULES = 50
 PREVIEW_LIMIT = 50
+PREVIEW_LIMIT_LOCAL = 30  # the local CPU scorer is slow: fewer bills keep the preview usable
+
+
+def preview_limit(settings: Any) -> int:
+    return PREVIEW_LIMIT_LOCAL if settings.scorer == "local" else PREVIEW_LIMIT
+
+
 EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
 MAX_RULES_PARSED = 200  # more is a validation error (never silently dropped) up to this cap
 ACTION_RE = re.compile(r"^(remove|up|down)-(\d+)$")
@@ -472,7 +479,9 @@ def run_preview(request: Request, db: Session, form: ProfileForm, user: User) ->
     scorer = None
     try:
         scorer = get_scorer(settings)
-        rows = scoring_service.preview_matches(db, scorer, texts, threshold, limit=PREVIEW_LIMIT)
+        rows = scoring_service.preview_matches(
+            db, scorer, texts, threshold, limit=preview_limit(settings)
+        )
     except NotImplementedError:
         return {"error": "rules.preview.unavailable"}
     except ScoringError:

@@ -160,7 +160,7 @@ def test_default_shows_only_matched_bills_with_score(user_client, profiled):
 def test_show_all_lists_every_bill(user_client, profiled, value):
     profile, matched, below, unscored = profiled
     page = user_client.get("/", params={"all": value}).text
-    assert numbers(page) == [matched.number, below.number, unscored.number]
+    assert numbers(page) == [unscored.number, below.number, matched.number]  # by number
     assert "0,12" in page
 
 
@@ -191,12 +191,14 @@ def test_bad_profile_parameter_is_ignored(user_client, profiled, value):
     assert numbers(response.text) == [matched.number]
 
 
-def test_newest_first_with_missing_dates_last(user_client, db, me):
+def test_newest_first_by_bill_number(user_client, db, me):
+    """Newest first is the bill number (assigned at filing), not the filing date: vote-only
+    records have no filing date."""
     make_bill(db, "500", filing_date=date(2024, 1, 1))
     make_bill(db, "501", filing_date=None)
     make_bill(db, "502", filing_date=date(2025, 1, 1))
     make_bill(db, "99", filing_date=date(2025, 1, 1))
-    assert numbers(user_client.get("/").text) == ["502", "99", "500", "501"]
+    assert numbers(user_client.get("/").text) == ["502", "501", "500", "99"]
 
 
 # --- pagination edges ---------------------------------------------------------------------
