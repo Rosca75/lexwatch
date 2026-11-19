@@ -1,15 +1,15 @@
 # syntax=docker/dockerfile:1
-FROM python:3.12-slim
+
+# --- build stage: uv resolves and installs the locked dependencies into /app/.venv ---------
+FROM python:3.12-slim AS build
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
-    UV_PROJECT_ENVIRONMENT=/app/.venv \
-    PATH="/app/.venv/bin:$PATH"
+    UV_PROJECT_ENVIRONMENT=/app/.venv
 
 # Set to 1 to include the optional local ONNX scorer (onnxruntime, tokenizers, numpy).
 ARG INSTALL_LOCAL_SCORER=0
@@ -33,10 +33,21 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     && uv sync --frozen --no-dev $EXTRA \
     && chmod 0755 /app/docker-entrypoint.sh
 
+# --- runtime stage: same Python base, no uv, non-root ------------------------------------
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
 RUN groupadd --system --gid 10001 lexwatch \
     && useradd --system --uid 10001 --gid lexwatch --home-dir /app --shell /usr/sbin/nologin lexwatch \
     && mkdir -p /models \
     && chown lexwatch:lexwatch /models
+
+WORKDIR /app
+# The venv's interpreter links to /usr/local/bin/python3.12, identical in both stages.
+COPY --from=build /app /app
 
 USER lexwatch
 EXPOSE 8000
