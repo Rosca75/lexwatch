@@ -135,6 +135,7 @@ def seed(url: str) -> None:
                 role="admin",
                 language="fr",
                 previous_visit_at=now - timedelta(days=2),
+                last_visit_at=now - timedelta(days=2),
             ),
             "user": User(
                 oidc_sub="dev-user",
@@ -143,6 +144,7 @@ def seed(url: str) -> None:
                 role="user",
                 language="fr",
                 previous_visit_at=now - timedelta(days=2),
+                last_visit_at=now - timedelta(days=2),
             ),
         }
         db.add_all(users.values())
