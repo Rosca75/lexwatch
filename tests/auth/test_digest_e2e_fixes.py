@@ -198,8 +198,8 @@ def test_fr_digest_uses_decimal_comma_en_uses_point(db, owner):
     add_match(db, profile, add_bill(db, "20", changed=NOW - timedelta(hours=1)), score=0.4567)
     fr = build_digest(db, profile, profile.last_digest_at, "fr", settings=SETTINGS, now=NOW)
     en = build_digest(db, profile, profile.last_digest_at, "en", settings=SETTINGS, now=NOW)
-    assert "0,46" in fr.html and "0,46" in fr.text and "0.46" not in fr.text
-    assert "0.46" in en.html and "0.46" in en.text
+    assert "0,457" in fr.html and "0,457" in fr.text and "0.457" not in fr.text
+    assert "0.457" in en.html and "0.457" in en.text
 
 
 def test_digest_title_fallback_and_truncation(db, owner):

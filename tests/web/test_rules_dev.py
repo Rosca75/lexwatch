@@ -292,7 +292,7 @@ def test_preview_with_fake_scorer(client, db, monkeypatch):
     assert "<html" not in html
     assert "/bills/8601" in html and "/bills/8602" not in html
     assert "1 des 2 projets les plus récents seraient retenus." in html
-    assert "blanchiment capitaux : 1,00" in html
+    assert "blanchiment capitaux : 1,000" in html
 
 
 def test_preview_without_js_uses_action(client, db, monkeypatch):

@@ -13,6 +13,10 @@ its own run so its billed units count in the admin page's monthly total. The run
 ``success`` when every request succeeded, ``partial`` when some bills were scored and some
 failed, ``failed`` when nothing was scored or the rescore raised. Bills or pairs left unscored
 are retried by the next daily run (``score_pending_bills``); the rescore itself is not retried.
+
+A worker stop request (``jobs.stopping``) ends a rescore after the current batch: the run is
+``failed`` with "interrupted (worker stopping)", ``WorkerStopping`` propagates to the worker,
+and the profile stays ``running`` until ``recover_interrupted`` sets it back to ``pending``.
 """
 
 from __future__ import annotations
@@ -23,6 +27,8 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from lexwatch.config import Settings
+from lexwatch.jobs.daily import mark_stopped
+from lexwatch.jobs.stopping import WorkerStopping, commit_or_stop
 from lexwatch.models import Profile, Run
 from lexwatch.scoring.base import Scorer
 
@@ -59,7 +65,9 @@ def execute_rescore(
     scorer = scorer or get_scorer(settings)
     before = int(getattr(scorer, "billed_units", 0) or 0)
     try:
-        result = rescore_profile(session, scorer, profile_id, run=run, commit=session.commit)
+        result = rescore_profile(
+            session, scorer, profile_id, run=run, commit=commit_or_stop(session)
+        )
         run.bills_scored, run.bills_unscored = result.scored, result.unscored
         if result.error is None:
             run.status = "success"
@@ -67,6 +75,11 @@ def execute_rescore(
             run.status = "partial" if result.scored else "failed"
             run.error_message = result.error
         session.commit()
+    except WorkerStopping:
+        session.rollback()
+        run.billed_units = int(getattr(scorer, "billed_units", 0) or 0) - before
+        mark_stopped(session, run)
+        raise
     except Exception as exc:
         session.rollback()
         log.exception("rescore.failed", extra={"run_id": run.id, "profile_id": profile_id})
@@ -146,19 +159,26 @@ def execute_rescore_all(
         session.commit()
         try:
             result = rescore_profile(
-                session, scorer, profile_id, force=True, run=run, commit=session.commit
+                session, scorer, profile_id, force=True, run=run, commit=commit_or_stop(session)
             )
             scored += result.scored
             unscored += result.unscored
             if result.error:
                 errors.append(f"profile {profile_id}: {result.error}")
             session.commit()
+        except WorkerStopping:
+            # The profile stays ``running``: recover_interrupted sets it back to ``pending``
+            # at the next start, like the profiles this run did not reach yet.
+            session.rollback()
+            run.bills_scored, run.bills_unscored = scored, unscored
+            run.billed_units = int(getattr(scorer, "billed_units", 0) or 0) - before
+            mark_stopped(session, run)
+            raise
         except Exception as exc:
             session.rollback()
             log.exception("rescore.failed", extra={"run_id": run.id, "profile_id": profile_id})
             errors.append(f"profile {profile_id}: {exc!r}")
-        finally:
-            finish_rescore_status(session, profile_id)
+        finish_rescore_status(session, profile_id)
 
     run.bills_scored, run.bills_unscored = scored, unscored
     if not errors:

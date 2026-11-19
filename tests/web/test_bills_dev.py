@@ -48,7 +48,7 @@ def test_home_lists_matched_bills_newest_first(client, data):
     response = client.get(f"/?profile={data['aml'].id}")
     assert response.status_code == 200
     assert _rows(response.text) == ["8300", "8100"]
-    assert "0,66" in response.text  # French decimal separator
+    assert "0,660" in response.text  # French decimal separator, three decimals
     assert '<td class="nowrap">Proposition</td>' in response.text  # translated type
     assert "En commission" in response.text  # translated status
 
@@ -58,7 +58,7 @@ def test_home_in_english(client, data):
     response = client.get("/")
     assert '<html lang="en">' in response.text
     assert '<td class="nowrap">Member’s bill</td>' in response.text
-    assert "0.66" in response.text
+    assert "0.660" in response.text
 
 
 def test_home_type_labels_are_short_and_pager_has_no_arrows(client, db, data):
@@ -153,8 +153,8 @@ def test_bill_detail(client, db, data):
     assert "Projet de loi n° 8100" in html
     assert "https://www.chd.lu/fr/dossier/8100" in html
     assert "Déposé" in html and "En commission" in html  # history translated
-    assert "0,81" in html
-    assert "blanchiment de capitaux : 0,81" in html  # per-rule score on hover
+    assert "0,810" in html
+    assert "blanchiment de capitaux : 0,810" in html  # per-rule score on hover
     assert 'aria-describedby="rules-' in html
     assert html.count("Chambre des Députés du Grand-Duché de Luxembourg") >= 2
 

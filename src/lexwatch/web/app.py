@@ -7,19 +7,20 @@ import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from lexwatch.config import Settings, get_settings
-from lexwatch.db import get_engine, make_sessionmaker
+from lexwatch.db import get_db, get_engine, make_sessionmaker
 from lexwatch.i18n import load_catalogs
 from lexwatch.logging import configure_logging
+from lexwatch.models import User
 from lexwatch.web import auth
 from lexwatch.web.csrf import verify_csrf
-from lexwatch.web.deps import NotAuthenticated
+from lexwatch.web.deps import INT32_MAX, SESSION_USER_KEY, NotAuthenticated
 from lexwatch.web.routes import admin, bills, health, i18n, rules
 from lexwatch.web.templating import make_templates, render
 
@@ -28,6 +29,7 @@ SESSION_COOKIE = "lexwatch_session"
 SESSION_MAX_AGE = 12 * 3600
 
 
+log = logging.getLogger(__name__)
 access_log = logging.getLogger("lexwatch.access")
 QUIET_PREFIXES = ("/static/", "/health")
 
@@ -72,6 +74,31 @@ class AccessLogMiddleware:
                     "user_id": user_id,
                 },
             )
+
+
+def resolve_error_user(request: Request) -> None:
+    """Set ``request.state.user`` for an error page, so base.html shows the full top bar.
+
+    A 404 for an unknown path or a 500 never ran the ``current_user`` dependency. This only
+    reads the user of the session cookie: no DEV_AUTH auto-login, no session changes. Any
+    failure (e.g. the database is down) leaves an anonymous top bar.
+    """
+    if hasattr(request.state, "user"):
+        return
+    request.state.user = None
+    user_id = request.session.get(SESSION_USER_KEY) if "session" in request.scope else None
+    if type(user_id) is not int or not 0 < user_id <= INT32_MAX:
+        return
+    # Same session source as the routes (tests override get_db).
+    provider = request.app.dependency_overrides.get(get_db)
+    sessions = provider() if provider is not None else get_db(request)
+    try:
+        db = next(sessions)
+        request.state.user = db.get(User, user_id)
+    except Exception:
+        log.warning("web.error_page_user_failed", exc_info=True)
+    finally:
+        sessions.close()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -131,6 +158,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # ``detail`` is a short code for known errors (CSRF raises ``detail="csrf"``); the
         # template maps it to an i18n message (``error.csrf``) and never prints it raw.
         detail = exc.detail if isinstance(exc.detail, str) else None
+        resolve_error_user(request)
         return render(
             request,
             "error.html",
@@ -138,5 +166,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=exc.status_code,
             headers=getattr(exc, "headers", None),
         )
+
+    @app.exception_handler(Exception)
+    async def _server_error(request: Request, exc: Exception) -> Response:
+        # Starlette re-raises the exception after this response, so it is still logged.
+        if "text/html" not in request.headers.get("accept", ""):
+            return PlainTextResponse("Internal Server Error", status_code=500)
+        try:
+            resolve_error_user(request)
+            return render(request, "error.html", {"status_code": 500, "detail": None}, 500)
+        except Exception:
+            log.exception("web.error_page_failed")
+            return PlainTextResponse("Internal Server Error", status_code=500)
 
     return app

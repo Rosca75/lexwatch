@@ -318,12 +318,22 @@ runs `tick()`:
    recomputed from stored scores (no scoring request), so a new `DEFAULT_THRESHOLD` or scorer
    default takes effect after a restart.
 
+7. **Stop (SIGTERM/SIGINT).** The signal handler only sets a flag (`jobs.stopping`). Jobs
+   pass `commit_or_stop(session)` as the scoring `commit` callback: after each committed
+   batch it raises `WorkerStopping` when a stop was requested. The run becomes `failed` with
+   "interrupted (worker stopping)" (no digest step), a profile being rescored stays `running`
+   (back to `pending` via `recover_interrupted` at the next start), and the worker loop exits,
+   so `docker compose stop` does not need SIGKILL.
+
 Run status lifecycle: `queued -> running -> success | partial | failed`. Per-source and per-step
 detail goes in `runs.details`, for example
 `{"sources": {"chd": {"status": "failed", "error": "..."}}, "digests_sent": 2, "digests_failed": 0, "digests_skipped": 5, "billing": {"unit": "input_tokens"}}`.
 A failed digest makes the digest step fail (run `partial`); the counts are kept.
-`"bootstrap": true` marks the run whose ingestion filled an empty `bills` table; the digest
-ignores timestamps inside that run's window, and a profile's first digest only lists changes
+`"bootstrap": true` marks the run whose ingestion filled an empty `bills` table, and also a
+daily/manual run whose most recent earlier daily/manual run was a bootstrap run that did not
+finish with `success` nor complete its scoring (`"scoring_complete": true`), so the run that
+finishes the initial scoring after an interruption counts too; the digest ignores timestamps
+(bill first seen / last changed, match computed) inside those runs' windows, and a profile's first digest only lists changes
 after the profile was created.
 The admin page reads `status`, `error_message` and `details`. The monthly cost is
 `sum(billed_units)` over `runs.started_at` in the current month, preview runs included.

@@ -8,6 +8,7 @@ missing key is visible on screen and caught by the i18n coverage test).
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from functools import cache
 from importlib import resources
 
@@ -66,11 +67,15 @@ def t(key: str, lang: str | None = None, **fmt: object) -> str:
     return text
 
 
-def format_score(value: float | None, lang: str | None) -> str:
-    """Two decimals with the language's decimal separator (``0,42`` in French)."""
+SCORE_DECIMALS = 3
+
+
+def format_score(value: float | Decimal | None, lang: str | None) -> str:
+    """Scores and thresholds everywhere (UI, hover lines, digest): three decimals with the
+    language's decimal separator (``0,425`` in French, ``0.425`` in English)."""
     if value is None:
         return ""
-    text = f"{value:.2f}"
+    text = f"{float(value):.{SCORE_DECIMALS}f}"
     return text.replace(".", ",") if normalize_lang(lang) == "fr" else text
 
 

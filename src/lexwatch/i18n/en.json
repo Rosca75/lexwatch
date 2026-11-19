@@ -120,7 +120,6 @@
   "admin.run_now.help": "Queues ingestion, scoring and digests. The worker starts it within seconds.",
   "admin.rescore_all": "Rescore all",
   "admin.rescore_all.help": "Rescores every bill for every profile, sending each bill to the scoring service again (may incur cost), for example after a model change.",
-  "admin.state": "Status",
   "admin.state.unscored": "Unscored",
   "admin.state.stale": "Scores from an older model",
   "admin.state.rescoring": "Profiles being rescored",

@@ -120,7 +120,6 @@
   "admin.run_now.help": "Met en file une collecte, une évaluation et l’envoi des résumés. Le traitement démarre dans les secondes qui suivent.",
   "admin.rescore_all": "Tout réévaluer",
   "admin.rescore_all.help": "Réévalue tous les projets pour tous les profils, en renvoyant chaque projet au service d’évaluation (peut entraîner un coût), par exemple après un changement de modèle.",
-  "admin.state": "État",
   "admin.state.unscored": "Non évalués",
   "admin.state.stale": "Scores d’un ancien modèle",
   "admin.state.rescoring": "Profils en réévaluation",

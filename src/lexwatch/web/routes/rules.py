@@ -193,11 +193,8 @@ class ProfileForm:
 
 
 def format_threshold(value: Decimal | float, lang: str) -> str:
-    """Up to three decimals (the column precision), at least two: 0.5 -> 0.50, 0.425."""
-    text = f"{float(value):.3f}"
-    if text.endswith("0"):
-        text = text[:-1]
-    return text.replace(".", ",") if lang == "fr" else text
+    """Same format as scores (``i18n.format_score``): three decimals, 0.5 -> 0.500."""
+    return format_score(value, lang)
 
 
 def get_profile_for(db: Session, user: User, profile_id: int) -> Profile:
