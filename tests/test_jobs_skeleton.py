@@ -26,13 +26,13 @@ def steps(monkeypatch):
         scorer.billed_units += 3
         return service.ScoreResult(scored=3)
 
-    def send(session, now=None, dry_run=False):
+    def send(session, now=None, dry_run=False, *, settings=None, echo=None):
         calls.append("digest")
-        return 1
+        return digest.DigestReport(sent=1)
 
     monkeypatch.setattr(pipeline, "run_ingestion", ingest)
     monkeypatch.setattr(service, "score_pending_bills", score)
-    monkeypatch.setattr(digest, "send_digests", send)
+    monkeypatch.setattr(digest, "send_digests_report", send)
     return calls
 
 

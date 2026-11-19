@@ -36,7 +36,7 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
     Commits after each step so the admin page shows progress.
     """
     from lexwatch.ingest.pipeline import run_ingestion
-    from lexwatch.notify.digest import send_digests
+    from lexwatch.notify.digest import send_digests_report
     from lexwatch.scoring.factory import get_scorer
     from lexwatch.scoring.service import score_pending_bills
 
@@ -75,12 +75,26 @@ def execute_run(session: Session, run: Run, settings: Settings) -> Run:
         log.exception("job.scoring_failed", extra={"run_id": run.id})
         errors["scoring"] = repr(exc)
     run.billed_units = int(getattr(scorer, "billed_units", 0) or 0)
+    billing_unit = getattr(scorer, "billing_unit", None)
+    if billing_unit:  # also when scoring raised after some billed requests
+        run.details = {**(run.details or {}), "billing": {"unit": billing_unit}}
+    session.commit()
 
     if settings.digest_enabled:
         try:
-            sent = send_digests(session)
-            run.details = {**(run.details or {}), "digests_sent": sent}
-            steps_ok += 1
+            report = send_digests_report(session, settings=settings)
+            run.details = {
+                **(run.details or {}),
+                "digests_sent": report.sent,
+                "digests_failed": len(report.failed),
+                "digests_skipped": report.skipped,
+            }
+            if report.failed:
+                errors["digest"] = f"{len(report.failed)} failed: " + "; ".join(
+                    f"profile {pid}: {err}" for pid, err in sorted(report.failed.items())
+                )
+            else:
+                steps_ok += 1
             session.commit()
         except Exception as exc:
             session.rollback()
