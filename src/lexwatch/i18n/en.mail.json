@@ -1,0 +1,13 @@
+{
+  "email.digest.subject": "lexwatch: {profile} – {count} new or changed bill(s)",
+  "email.digest.intro": "New or changed bills for the profile “{profile}”: {count}.",
+  "email.digest.col.number": "No.",
+  "email.digest.col.title": "Title",
+  "email.digest.col.status": "Status",
+  "email.digest.col.score": "Score",
+  "email.digest.profile_link": "See all bills for the profile “{profile}”",
+  "email.digest.reason": "You receive this message because your address is listed as a recipient of the profile “{profile}”.",
+  "email.source": "Source: Chambre des Députés du Grand-Duché de Luxembourg",
+  "email.digest.text.status_score": "Status: {status} | Score: {score}",
+  "email.digest.text.score": "Score: {score}"
+}
