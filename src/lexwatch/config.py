@@ -61,7 +61,8 @@ class Settings:
     oidc_redirect_uri: str = ""  # default: {base_url}/auth/callback
     oidc_scopes: str = "openid email profile"
     oidc_role_claim: str = "roles"  # claim holding groups/roles (list or string)
-    oidc_admin_value: str = "lexwatch-admin"  # value of role_claim that grants admin
+    oidc_admin_value: str = "lexwatch-admin"  # value(s) of role_claim granting admin (comma-sep)
+    oidc_end_session: bool = True  # RP-initiated logout when the provider supports it
 
     # --- sources / http ------------------------------------------------------------------
     http_user_agent: str = "lexwatch/0.1 (+internal bill tracker)"
@@ -106,6 +107,7 @@ class Settings:
     smtp_starttls: bool = True
     smtp_ssl: bool = False
     smtp_from: str = "lexwatch@localhost"
+    smtp_timeout_seconds: float = 30.0
     digest_enabled: bool = True
 
     # --- worker --------------------------------------------------------------------------
@@ -126,7 +128,7 @@ class Settings:
         e = os.environ if environ is None else environ
         d = cls()
         return cls(
-            env=_str(e.get("ENV"), d.env),
+            env=_str(e.get("ENV"), d.env).lower(),
             log_level=_str(e.get("LOG_LEVEL"), d.log_level),
             base_url=_str(e.get("BASE_URL"), d.base_url),
             secret_key=_str(e.get("SECRET_KEY"), d.secret_key),
@@ -142,6 +144,7 @@ class Settings:
             oidc_scopes=_str(e.get("OIDC_SCOPES"), d.oidc_scopes),
             oidc_role_claim=_str(e.get("OIDC_ROLE_CLAIM"), d.oidc_role_claim),
             oidc_admin_value=_str(e.get("OIDC_ADMIN_VALUE"), d.oidc_admin_value),
+            oidc_end_session=_bool(e.get("OIDC_END_SESSION"), d.oidc_end_session),
             http_user_agent=_str(e.get("HTTP_USER_AGENT"), d.http_user_agent),
             http_timeout_seconds=_float(e.get("HTTP_TIMEOUT_SECONDS"), d.http_timeout_seconds),
             chd_enabled=_bool(e.get("CHD_ENABLED"), d.chd_enabled),
@@ -183,6 +186,7 @@ class Settings:
             smtp_starttls=_bool(e.get("SMTP_STARTTLS"), d.smtp_starttls),
             smtp_ssl=_bool(e.get("SMTP_SSL"), d.smtp_ssl),
             smtp_from=_str(e.get("SMTP_FROM"), d.smtp_from),
+            smtp_timeout_seconds=_float(e.get("SMTP_TIMEOUT_SECONDS"), d.smtp_timeout_seconds),
             digest_enabled=_bool(e.get("DIGEST_ENABLED"), d.digest_enabled),
             daily_job_time=_str(e.get("DAILY_JOB_TIME"), d.daily_job_time),
             timezone=_str(e.get("APP_TIMEZONE"), d.timezone),

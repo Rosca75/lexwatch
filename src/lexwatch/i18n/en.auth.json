@@ -1,0 +1,10 @@
+{
+  "auth.signin": "Sign in",
+  "auth.retry": "Try signing in again",
+  "auth.logged_out.title": "You are signed out",
+  "auth.error.title": "Sign-in failed",
+  "auth.error.not_configured": "Sign-in is not configured. Contact the administrator.",
+  "auth.error.provider": "The sign-in service cannot be reached right now. Try again in a few minutes.",
+  "auth.error.failed": "Sign-in did not complete. Please try again.",
+  "auth.error.denied": "Sign-in was refused or cancelled."
+}
