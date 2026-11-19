@@ -70,6 +70,8 @@ def cmd_serve(settings: Settings, args: argparse.Namespace) -> int:
         proxy_headers=True,
         forwarded_allow_ips="*",
         log_config=None,
+        # No client IP in the logs: the app logs http.request (method, path, status, user id).
+        access_log=False,
     )
     return 0
 

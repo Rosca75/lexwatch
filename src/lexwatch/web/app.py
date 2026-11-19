@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -9,6 +11,7 @@ from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from lexwatch.config import Settings, get_settings
 from lexwatch.db import get_engine, make_sessionmaker
@@ -23,6 +26,52 @@ from lexwatch.web.templating import make_templates, render
 STATIC_DIR = Path(__file__).parent / "static"
 SESSION_COOKIE = "lexwatch_session"
 SESSION_MAX_AGE = 12 * 3600
+
+
+access_log = logging.getLogger("lexwatch.access")
+QUIET_PREFIXES = ("/static/", "/health")
+
+
+class AccessLogMiddleware:
+    """One ``http.request`` log line per request: method, path, status, duration, user id.
+
+    Replaces uvicorn's access log, which records the client IP address (personal data). The
+    query string is left out (search terms); static files and ``/health`` are not logged.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"].startswith(QUIET_PREFIXES):
+            await self.app(scope, receive, send)
+            return
+        start = time.perf_counter()
+        status = 500
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            user = (scope.get("state") or {}).get("user")
+            user_id = getattr(user, "id", None)
+            if user_id is None:
+                user_id = (scope.get("session") or {}).get("user_id")
+            access_log.info(
+                "http.request",
+                extra={
+                    "method": scope["method"],
+                    "path": scope["path"],
+                    "status": status,
+                    "duration_ms": round((time.perf_counter() - start) * 1000, 1),
+                    "user_id": user_id,
+                },
+            )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -51,6 +100,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         same_site="lax",
         https_only=settings.session_https_only or settings.is_production,
     )
+    # Outermost, so it sees the final status, the session and request.state.user.
+    app.add_middleware(AccessLogMiddleware)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     for router in (

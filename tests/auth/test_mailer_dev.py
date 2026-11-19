@@ -121,3 +121,33 @@ def test_starttls_failure_closes_connection(monkeypatch):
     with pytest.raises(mailer.MailerError):
         mailer.send_message(settings, _msg(settings))
     assert FakeSMTP.instances[0].closed
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected"),
+    [
+        (
+            smtplib.SMTPRecipientsRefused(
+                {"a@x.lu": (550, b"5.1.1 <a@x.lu>: unknown"), "b@x.lu": (553, b"<b@x.lu> bad")}
+            ),
+            "SMTPRecipientsRefused: 550, 553",
+        ),
+        (
+            smtplib.SMTPSenderRefused(553, b"<lexwatch@x.lu> refused", "lexwatch@x.lu"),
+            "SMTPSenderRefused: 553",
+        ),
+        (smtplib.SMTPDataError(554, b"rejected for <a@x.lu>"), "SMTPDataError: 554"),
+        (ConnectionRefusedError(111, "Connection refused"), "ConnectionRefusedError: errno 111"),
+    ],
+)
+def test_smtp_errors_keep_type_and_code_only(monkeypatch, caplog, exc, expected):
+    def boom(self, message):
+        raise exc
+
+    monkeypatch.setattr(FakeSMTP, "send_message", boom)
+    settings = make_test_settings(smtp_host="relay")
+    with pytest.raises(mailer.MailerError) as info:
+        mailer.send_message(settings, _msg(settings))
+    assert str(info.value) == expected
+    assert info.value.__cause__ is None
+    assert "@" not in caplog.text

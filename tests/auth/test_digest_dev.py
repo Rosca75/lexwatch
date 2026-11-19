@@ -254,7 +254,7 @@ def test_send_digests_sends_and_updates_last_digest_at(db, owner, scenario):
         assert state.messages == []
 
 
-def test_send_failure_is_reported_and_does_not_stop_others(db, owner, scenario):
+def test_send_failure_is_reported_and_does_not_stop_others(db, owner, scenario, caplog):
     second = add_profile(db, owner, name="Deux", recipients="refused@x.lu")
     add_match(db, second, add_bill(db, "40", changed=NOW - timedelta(hours=1)))
     third = add_profile(db, owner, name="Trois", recipients="b@x.lu")
@@ -266,7 +266,10 @@ def test_send_failure_is_reported_and_does_not_stop_others(db, owner, scenario):
     report = excinfo.value.report
     assert report.sent == 2
     assert list(report.failed) == [second.id]
-    assert "SMTPRecipientsRefused" in report.failed[second.id]
+    assert report.failed[second.id].startswith("SMTPRecipientsRefused: 5")
+    # Type and SMTP code only: no recipient address in runs.error_message or the logs.
+    assert "refused@x.lu" not in report.failed[second.id]
+    assert "refused@x.lu" not in caplog.text
     assert second.last_digest_at == LAST
     assert scenario.last_digest_at == NOW and third.last_digest_at == NOW
     assert [m.rcpt_to for m in state.messages] == [["a@x.lu"], ["b@x.lu"]]

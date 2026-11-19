@@ -64,6 +64,23 @@ def _connect(settings: Settings) -> smtplib.SMTP:
     return smtp
 
 
+def describe_error(exc: BaseException) -> str:
+    """Exception type plus SMTP reply code(s) or errno, never the server's text.
+
+    SMTP replies and ``SMTPRecipientsRefused`` carry recipient addresses (personal data), so
+    neither logs nor ``runs.error_message`` get them: "SMTPRecipientsRefused: 550, 553".
+    """
+    name = type(exc).__name__
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        codes = sorted({str(code) for code, _ in (exc.recipients or {}).values()})
+        return f"{name}: {', '.join(codes)}" if codes else name
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return f"{name}: {exc.smtp_code}"
+    if isinstance(exc, OSError) and exc.errno is not None:
+        return f"{name}: errno {exc.errno}"
+    return name
+
+
 def send_message(settings: Settings, message: EmailMessage) -> None:
     """Send via ``smtplib`` (SMTP_SSL or SMTP + STARTTLS, optional login).
 
@@ -78,7 +95,7 @@ def send_message(settings: Settings, message: EmailMessage) -> None:
                 smtp.login(settings.smtp_username, settings.smtp_password)
             refused = smtp.send_message(message)
     except (smtplib.SMTPException, OSError) as exc:
-        raise MailerError(f"{type(exc).__name__}: {exc}") from exc
+        raise MailerError(describe_error(exc)) from None
     if refused:
         log.warning("mail.recipients_refused", extra={"refused_count": len(refused)})
     log.info("mail.sent", extra={"message_id": message["Message-ID"]})

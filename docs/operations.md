@@ -85,7 +85,11 @@ The worker has no endpoint: monitor it through its logs and the runs table.
 **Logs.** Both containers write one JSON object per line to stdout:
 `{"ts", "level", "logger", "msg", ...extra fields}`. `msg` is a stable event name. Logs carry no
 personal data beyond a user id and email. Ship them with your usual collector
-(`docker compose logs -f worker` to read them by hand).
+(`docker compose logs -f worker` to read them by hand). The app logs one `http.request` line
+per request (method, path without query string, status, duration, user id); uvicorn's own
+access log, which records client IP addresses, is off. SMTP failures are logged and stored in
+`runs.error_message` as the exception type and SMTP reply code only (for example
+`SMTPRecipientsRefused: 550`), never with recipient addresses.
 
 **What to alert on:**
 

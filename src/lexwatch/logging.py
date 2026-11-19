@@ -40,6 +40,24 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str, ensure_ascii=False)
 
 
+class DropClientAddress(logging.Filter):
+    """Blank the client address of uvicorn access records (personal data, spec section 8).
+
+    ``lexwatch serve`` turns uvicorn's access log off and logs ``http.request`` (method, path,
+    status, user id) instead; this filter covers uvicorn started any other way.
+    Access records carry ``(client_addr, method, path, http_version, status)`` as args.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) == 5:
+            record.args = ("-", *args[1:])
+        return True
+
+
+_DROP_CLIENT = DropClientAddress()
+
+
 def configure_logging(level: str = "INFO") -> None:
     """Install the JSON stdout handler on the root logger (idempotent).
 
@@ -57,3 +75,6 @@ def configure_logging(level: str = "INFO") -> None:
         lg = logging.getLogger(name)
         lg.handlers[:] = []
         lg.propagate = True
+    access = logging.getLogger("uvicorn.access")
+    if _DROP_CLIENT not in access.filters:
+        access.addFilter(_DROP_CLIENT)
