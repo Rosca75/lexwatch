@@ -235,16 +235,17 @@ Deploy-ContainerApp -Name $appName -Ingress
 Deploy-ContainerApp -Name $workerName -AppArgs @('worker')
 
 # --- 7. smoke test ------------------------------------------------------------------------
-Write-Step 'Waiting for /health and /ready'
+# /ready also requires a configured scorer, so before Foundry is set up only /health is checked.
+$paths = if ($state.foundryEndpoint) { @('/health', '/ready') } else { @('/health') }
+Write-Step "Waiting for $($paths -join ' and ')"
 $ok = $false
 foreach ($i in 1..30) {
     try {
-        $h = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "$baseUrl/health"
-        $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "$baseUrl/ready"
-        if ($h.StatusCode -eq 200 -and $r.StatusCode -eq 200) { $ok = $true; break }
+        foreach ($p in $paths) { Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "$baseUrl$p" | Out-Null }
+        $ok = $true; break
     } catch { Start-Sleep -Seconds 10 }
 }
-if ($ok) { Write-Host "    /health and /ready: 200" -ForegroundColor Green }
+if ($ok) { Write-Host "    $($paths -join ' and '): 200" -ForegroundColor Green }
 else {
     Write-Warn 'Not ready after 5 minutes. Logs:'
     Write-Host "    az containerapp logs show -n $appName -g $ResourceGroup --tail 100"
