@@ -1,0 +1,8 @@
+# ACR Task: build the lexwatch image in the registry with BuildKit (the Dockerfile uses
+# RUN --mount), then push it. Run by deploy.ps1: az acr run -f deploy/azure/acr-build.yaml --set tag=<tag> .
+version: v1.1.0
+steps:
+  - build: -t $Registry/lexwatch:{{.Values.tag}} -f Dockerfile .
+    env: ["DOCKER_BUILDKIT=1"]
+  - push:
+      - $Registry/lexwatch:{{.Values.tag}}

@@ -13,5 +13,4 @@ docs
 dist
 build
 models
-Dockerfile
 docker-compose.yml
